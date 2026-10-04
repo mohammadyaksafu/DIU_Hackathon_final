@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { NetworkGraph } from "@/components/NetworkGraph";
-import { Button, Card, DecisionBadge, ErrorBox, Pill, ScoreBar, Spinner, useApi } from "@/components/ui";
+import { Button, Card, DecisionBadge, ErrorBox, Pill, ScoreBar, Spinner, useApi, RiskLevel } from "@/components/ui";
 import { api, fmtBDT, fmtTime } from "@/lib/api";
 import type { CaseDetail, Contribution, Narrative, WalletGraph } from "@/lib/types";
 
@@ -109,7 +109,7 @@ export default function CasePage() {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold text-ink">Case #{c.id}</h1>
         <DecisionBadge decision={c.decision} size="lg" />
-        <span className="tabular text-sm text-ink-2">risk <strong className="text-ink">{c.risk_score.toFixed(3)}</strong></span>
+        <RiskLevel score={c.risk_score} decision={c.decision} />
         <Pill>{c.status.toLowerCase()}{c.label ? ` · ${c.label}` : ""}</Pill>
         {c.customer_action && <Pill tone="brand">customer {c.customer_action}</Pill>}
         {c.ground_truth_scenario && <Pill>synthetic ground truth: {c.ground_truth_scenario}</Pill>}

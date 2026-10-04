@@ -37,22 +37,35 @@ export default function AnalystQueue() {
         description="Ranked by calibrated risk. HOLD cases block a transfer until reviewed (SOP-05: 15-minute target)."
         actions={<RefreshButton onClick={reload} busy={loading} />} />
 
+      {data && data.items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-brand/25 bg-brand-soft/60 px-4 py-3 text-sm">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-brand-ink" aria-hidden>?</span>
+          <p className="min-w-0 flex-1 text-ink-2">
+            <strong className="text-ink">Start here:</strong> open the highest-risk case to see the evidence, the mule-ring network and the AI case summary, then label it.
+            To follow a live transfer end to end, run a scenario in the <Link href="/customer" className="font-medium text-brand underline">Customer app</Link> and use its alert link.
+          </p>
+          <Link href={`/analyst/cases/${data.items[0].id}`} className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-ink shadow-raised hover:brightness-110">
+            Open case #{data.items[0].id} →
+          </Link>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filters">
-        <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+        <select aria-label="Filter by status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
           <option value="OPEN,INVESTIGATING">Open + investigating</option>
           {STATUS.map((s) => <option key={s} value={s}>{s.toLowerCase()}</option>)}
           <option value="">All statuses</option>
         </select>
-        <select value={decision} onChange={(e) => { setDecision(e.target.value); setPage(1); }} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+        <select aria-label="Filter by decision" value={decision} onChange={(e) => { setDecision(e.target.value); setPage(1); }} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
           <option value="">All decisions</option>
           <option value="HOLD">Hold</option>
           <option value="WARN">Warn</option>
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as "risk" | "newest")} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+        <select aria-label="Sort order" value={sort} onChange={(e) => setSort(e.target.value as "risk" | "newest")} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
           <option value="risk">Highest risk first</option>
           <option value="newest">Newest first</option>
         </select>
-        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search wallet or tx id"
+        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search wallet or tx id" aria-label="Search wallet or transaction id"
           className="min-w-48 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:flex-none" />
       </div>
 
