@@ -11,5 +11,5 @@
 | Supporting tracks | Track 03: Customer empowerment / financial independence · Track 06: Investigation copilot |
 | Team | `<team name>` |
 | Members | `<member names>` |
-| Repository | https://github.com/mohammadyaksafu/DIU_Hackathon |
+| Repository | https://github.com/mohammadyaksafu/DIU_Hackathon_final |
 | Live demo | https://165-99-219-251.sslip.io |

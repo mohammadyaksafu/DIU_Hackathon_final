@@ -1,7 +1,7 @@
 # Deploy Shurokkha to VPS 165.99.219.251
 
-Copy-paste guide for this server, deploying from the private GitHub repo
-**https://github.com/mohammadyaksafu/DIU_Hackathon**. When finished, the app will be live at:
+Copy-paste guide for this server, deploying from the GitHub repo
+**https://github.com/mohammadyaksafu/DIU_Hackathon_final**. When finished, the app will be live at:
 
 | What | URL |
 |---|---|
@@ -37,7 +37,7 @@ Your Desktop folder `DIU_Hackathon` has the same code as the repo but is not con
 ```powershell
 cd "$HOME\Desktop\DIU_Hackathon"
 git init -b main
-git remote add origin https://github.com/mohammadyaksafu/DIU_Hackathon.git
+git remote add origin https://github.com/mohammadyaksafu/DIU_Hackathon_final.git
 git fetch origin
 git reset origin/main
 git branch --set-upstream-to=origin/main main
@@ -130,7 +130,7 @@ Copy the whole line that starts with `ssh-ed25519`.
 
 **4b. Add it to GitHub** (in your browser):
 
-1. Open **https://github.com/mohammadyaksafu/DIU_Hackathon/settings/keys**
+1. Open **https://github.com/mohammadyaksafu/DIU_Hackathon_final/settings/keys**
 2. Click **Add deploy key**.
 3. Title: `VPS 165.99.219.251`. Key: paste the line.
 4. Leave **Allow write access unchecked** (the server only needs to read).
@@ -152,10 +152,10 @@ ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
 ssh -T git@github.com
 ```
 
-Expected reply: `Hi mohammadyaksafu/DIU_Hackathon! You've successfully authenticated, but GitHub does not provide shell access.` (That message is a success.)
+Expected reply: `Hi mohammadyaksafu/DIU_Hackathon_final! You've successfully authenticated, but GitHub does not provide shell access.` (That message is a success.)
 
 ```bash
-git clone git@github.com:mohammadyaksafu/DIU_Hackathon.git ~/shurokkha
+git clone git@github.com:mohammadyaksafu/DIU_Hackathon_final.git ~/shurokkha
 ls ~/shurokkha/deploy      # should list: Caddyfile  docker-compose.prod.yml
 ```
 

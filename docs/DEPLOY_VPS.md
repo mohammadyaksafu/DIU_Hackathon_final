@@ -12,7 +12,7 @@ The web app and API share one domain, so there is no CORS setup and only ports 8
 
 Files used: `deploy/docker-compose.prod.yml`, `deploy/Caddyfile`, `deploy/.env.example`.
 
-The code reaches the server through the private GitHub repo **https://github.com/mohammadyaksafu/DIU_Hackathon**: you push from your PC, the server pulls with a read-only deploy key.
+The code reaches the server through the GitHub repo **https://github.com/mohammadyaksafu/DIU_Hackathon_final**: you push from your PC, the server pulls with a read-only deploy key.
 
 ```
 Your PC ──git push──► GitHub (private) ──git clone / git pull──► VPS ──docker compose──► live site
@@ -107,7 +107,7 @@ If your project folder is **not yet connected to git** (it was copied or downloa
 ```powershell
 cd "$HOME\Desktop\DIU_Hackathon"
 git init -b main
-git remote add origin https://github.com/mohammadyaksafu/DIU_Hackathon.git
+git remote add origin https://github.com/mohammadyaksafu/DIU_Hackathon_final.git
 git fetch origin
 git reset origin/main
 git branch --set-upstream-to=origin/main main
@@ -137,7 +137,7 @@ cat ~/.ssh/github_deploy.pub
 
 Copy the whole line starting with `ssh-ed25519`. In your browser:
 
-1. Open **https://github.com/mohammadyaksafu/DIU_Hackathon/settings/keys**.
+1. Open **https://github.com/mohammadyaksafu/DIU_Hackathon_final/settings/keys**.
 2. **Add deploy key**. Title: `VPS`. Key: paste the line.
 3. Leave **Allow write access** unchecked.
 4. **Add key**.
@@ -157,12 +157,12 @@ ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
 ssh -T git@github.com
 ```
 
-Expected: `Hi mohammadyaksafu/DIU_Hackathon! You've successfully authenticated, but GitHub does not provide shell access.` (this is the success message).
+Expected: `Hi mohammadyaksafu/DIU_Hackathon_final! You've successfully authenticated, but GitHub does not provide shell access.` (this is the success message).
 
 ### 4c. Clone
 
 ```bash
-git clone git@github.com:mohammadyaksafu/DIU_Hackathon.git ~/shurokkha
+git clone git@github.com:mohammadyaksafu/DIU_Hackathon_final.git ~/shurokkha
 ls ~/shurokkha/deploy      # Caddyfile  docker-compose.prod.yml
 ```
 
