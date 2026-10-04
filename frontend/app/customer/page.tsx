@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { Button, Card, DecisionBadge, ErrorBox, Pill, ScoreBar, Spinner, useApi } from "@/components/ui";
 import { api, fmtBDT } from "@/lib/api";
-import type { DemoCustomer, ScoreResponse, TxPayload } from "@/lib/types";
+import type { DemoCustomer, Scenario, ScenarioRun, ScoreResponse, TxPayload } from "@/lib/types";
 
 type Lang = "bn" | "en";
 const PERSONA_LABEL: Record<string, string> = {
@@ -17,6 +17,18 @@ const PERSONA_LABEL: Record<string, string> = {
   freelancer: "Freelancer",
 };
 const TX_TYPES = ["send_money", "payment", "cash_out"];
+const EXPECTED_BN: Record<string, string> = { ALLOW: "অনুমোদন (ALLOW)", "WARN/HOLD": "সতর্কতা বা স্থগিত (WARN/HOLD)", HOLD: "স্থগিত (HOLD)" };
+const TX_TYPE_BN: Record<string, string> = { send_money: "সেন্ড মানি", payment: "পেমেন্ট", cash_out: "ক্যাশ আউট" };
+// Bangla explanation for every field of the /score request body, in the order it is sent.
+const FIELD_BN: { key: keyof TxPayload; label: string; help: string }[] = [
+  { key: "type", label: "লেনদেনের ধরন", help: "সেন্ড মানি, পেমেন্ট না ক্যাশ আউট" },
+  { key: "sender", label: "প্রেরক ওয়ালেট", help: "কে টাকা পাঠাচ্ছেন (সাইন ইন করা গ্রাহক)" },
+  { key: "receiver", label: "প্রাপক ওয়ালেট", help: "কার কাছে টাকা যাচ্ছে; নতুন বা সন্দেহজনক কিনা দেখা হয়" },
+  { key: "amount", label: "পরিমাণ (টাকা)", help: "গ্রাহকের স্বাভাবিক অঙ্কের সাথে তুলনা করা হয়" },
+  { key: "device_id", label: "ফোন / ডিভাইস", help: "নিজের পুরনো ফোন নাকি নতুন ফোন" },
+  { key: "geo_cell", label: "এলাকা", help: "গ্রাহকের নিজের এলাকা নাকি অন্য জায়গা" },
+  { key: "channel", label: "চ্যানেল", help: "অ্যাপ থেকে লেনদেন" },
+];
 const SAFETY_EXAMPLES = [
   {
     title: "পুরস্কার জিতেছেন",
@@ -70,6 +82,8 @@ export default function CustomerPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>("bn");
+  const scenarios = useApi(() => api<Scenario[]>("/simulator/scenarios", { role: "customer" }));
+  const [active, setActive] = useState<{ scenario: Scenario; run: ScenarioRun } | null>(null);
 
   const customer = customers.data?.find((c) => c.id === cid) ?? null;
 
@@ -84,8 +98,28 @@ export default function CustomerPage() {
       setAmountInput(String(amount));
       setResult(null);
       setOutcome(null);
+      setActive(null);
     }
   }, [customer]);
+
+  /** Ask the backend to prepare a scenario (it records any context, e.g. a SIM swap) and fill the form. */
+  async function runScenario(sc: Scenario) {
+    if (!customer) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    setOutcome(null);
+    try {
+      const run = await api<ScenarioRun>("/simulator/scenarios/run", { role: "customer", body: { customer_id: customer.id, scenario: sc.key } });
+      setTx(run.transaction);
+      setAmountInput(String(run.transaction.amount));
+      setActive({ scenario: sc, run });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function send(ev?: FormEvent) {
     ev?.preventDefault();
@@ -114,6 +148,9 @@ export default function CustomerPage() {
   if (customers.error) return <ErrorBox error={customers.error} onRetry={customers.reload} />;
 
   const msg = result?.customer_message[lang];
+  // Exactly what the Send button posts to /score.
+  const payload: TxPayload | null = tx ? { ...tx, amount: Number(amountInput) || 0 } : null;
+  const edited = !!(active && payload && (payload.receiver !== active.run.transaction.receiver || payload.amount !== active.run.transaction.amount || payload.type !== active.run.transaction.type));
 
   return (
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(420px,1.05fr)_minmax(360px,0.95fr)]">
@@ -207,6 +244,83 @@ export default function CustomerPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* ---------- Bangla demo scenarios: run through the real backend ---------- */}
+        <div className="mx-auto w-full max-w-[480px] space-y-4">
+          <Card title={<span lang="bn">ডেমো পরিস্থিতি বেছে নিন</span>}
+            subtitle={<span lang="bn">একটি পরিস্থিতিতে চাপ দিলে ব্যাকএন্ড প্রয়োজনীয় প্রেক্ষাপট তৈরি করে ফর্মটি পূরণ করবে। তারপর <strong>পাঠান</strong> চাপুন।</span>}>
+            {scenarios.loading ? <Spinner label="লোড হচ্ছে" /> : scenarios.error ? <ErrorBox error={scenarios.error} onRetry={scenarios.reload} /> : (
+              <div className="grid gap-2">
+                {scenarios.data?.map((sc) => {
+                  const on = active?.scenario.key === sc.key;
+                  const risky = sc.expected !== "ALLOW";
+                  return (
+                    <button key={sc.key} type="button" onClick={() => runScenario(sc)} disabled={busy || !customer} aria-pressed={on}
+                      className={`rounded-xl border p-3 text-left transition disabled:opacity-50 ${on ? "border-brand bg-brand-soft shadow-card" : "border-line bg-surface hover:border-brand/50 hover:bg-surface-2"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <span>
+                          <span lang="bn" className="block text-sm font-semibold text-ink">{sc.title_bn ?? sc.title}</span>
+                          <span className="block text-[11px] text-muted">{sc.title}</span>
+                        </span>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${risky ? "bg-critical-soft text-critical-text" : "bg-good-soft text-good-text"}`}>
+                          {EXPECTED_BN[sc.expected] ?? sc.expected}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          {active && (
+            <Card title={<span lang="bn">পরিস্থিতির গল্প: {active.scenario.title_bn ?? active.scenario.title}</span>}>
+              <p lang="bn" className="text-sm leading-6 text-ink">{active.scenario.story_bn ?? active.scenario.description}</p>
+              {(active.run.setup_bn?.length ?? 0) > 0 && (
+                <div className="mt-3 rounded-xl border border-warning/50 bg-warning-soft p-3">
+                  <p lang="bn" className="text-xs font-semibold text-warning-text">ব্যাকএন্ডে আগে থেকে রেকর্ড করা ঘটনা</p>
+                  <ul lang="bn" className="mt-1 space-y-1 text-sm text-ink">
+                    {active.run.setup_bn!.map((x) => <li key={x}>• {x}</li>)}
+                  </ul>
+                  <p lang="bn" className="mt-1 text-[11px] text-ink-2">এগুলো ফর্মে দেখা যায় না, কিন্তু ঝুঁকি হিসাবের সময় ব্যাকএন্ড এগুলো বিবেচনা করে।</p>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {payload && (
+            <Card title={<span lang="bn">ব্যাকএন্ডে যে ডেটা পাঠানো হবে</span>}
+              subtitle={<span><code className="rounded bg-surface-2 px-1.5 py-0.5 text-ink">POST /api/v1/score</code> <span lang="bn">· পাঠান চাপলে ঠিক এই ডেটা যায়</span></span>}
+              actions={edited ? <Pill>ফর্ম বদলানো হয়েছে</Pill> : undefined}>
+              <dl className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+                {FIELD_BN.map((f) => {
+                  const raw = payload[f.key];
+                  const value = raw == null || raw === "" ? "—" : f.key === "type" ? `${raw} (${TX_TYPE_BN[String(raw)] ?? raw})` : f.key === "amount" ? `${raw} (${fmtBDT(Number(raw))})` : String(raw);
+                  const flag = (f.key === "device_id" && customer && raw && raw !== customer.device_id) || (f.key === "geo_cell" && customer && raw && raw !== customer.home_geo);
+                  return (
+                    <div key={f.key} className={`grid grid-cols-[minmax(0,9rem)_1fr] gap-3 px-3 py-2 text-sm ${flag ? "bg-critical-soft/60" : ""}`}>
+                      <dt>
+                        <span lang="bn" className="block font-medium text-ink">{f.label}</span>
+                        <code className="text-[11px] text-muted">{f.key}</code>
+                      </dt>
+                      <dd className="min-w-0">
+                        <span className="tabular block break-all font-mono text-ink">{value}</span>
+                        <span lang="bn" className="block text-[11px] text-ink-2">
+                          {flag ? (f.key === "device_id" ? `নতুন ফোন! গ্রাহকের নিজের ফোন ${customer?.device_id}` : `অন্য এলাকা! গ্রাহকের নিজের এলাকা ${customer?.home_geo}`) : f.help}
+                        </span>
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-brand">JSON দেখুন (raw request body)</summary>
+                <pre className="mt-2 overflow-x-auto rounded-xl bg-surface-2 p-3 text-xs leading-relaxed text-ink">{JSON.stringify(payload, null, 2)}</pre>
+              </details>
+              {!active && <p lang="bn" className="mt-2 text-[11px] text-muted">কোনো পরিস্থিতি বাছাই করা হয়নি: এটি আপনার নিজের লেখা লেনদেন।</p>}
+            </Card>
+          )}
         </div>
       </section>
 

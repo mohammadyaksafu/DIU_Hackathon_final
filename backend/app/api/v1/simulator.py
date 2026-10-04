@@ -18,17 +18,29 @@ router = APIRouter(prefix="/simulator", tags=["simulator"])
 
 SCENARIOS = [
     {"key": "normal_contact", "title": "Send money to family", "expected": "ALLOW",
-     "description": "A usual transfer to a frequent contact, from the usual phone."},
+     "description": "A usual transfer to a frequent contact, from the usual phone.",
+     "title_bn": "পরিবারকে টাকা পাঠানো",
+     "story_bn": "নিয়মিত পরিচিত নম্বরে, নিজের ফোন থেকে, স্বাভাবিক অঙ্কের টাকা পাঠানো হচ্ছে। কোনো ঝুঁকির লক্ষণ নেই।"},
     {"key": "merchant_payment", "title": "Pay a shop", "expected": "ALLOW",
-     "description": "Payment to a merchant this customer already uses."},
+     "description": "Payment to a merchant this customer already uses.",
+     "title_bn": "দোকানে পেমেন্ট",
+     "story_bn": "গ্রাহক আগে থেকে যে দোকানে কেনাকাটা করেন, সেখানে স্বাভাবিক অঙ্কের পেমেন্ট করছেন।"},
     {"key": "prize_scam", "title": "'You won a prize' scam", "expected": "WARN/HOLD",
-     "description": "A caller says you won a prize and must pay a 2,000 BDT fee to a number you have never paid."},
+     "description": "A caller says you won a prize and must pay a 2,000 BDT fee to a number you have never paid.",
+     "title_bn": "'আপনি পুরস্কার জিতেছেন' প্রতারণা",
+     "story_bn": "একজন ফোন করে বলল আপনি পুরস্কার জিতেছেন, তবে আগে ২,০০০ টাকা 'ফি' দিতে হবে। নম্বরটিতে আপনি আগে কখনো টাকা পাঠাননি, আর সেটি অনেক মানুষের কাছ থেকে টাকা নিয়ে দ্রুত ক্যাশ আউট করা একটি চক্রের অংশ।"},
     {"key": "refund_scam", "title": "'Wrong send' refund scam", "expected": "WARN/HOLD",
-     "description": "A stranger sends 500 BDT, calls to say it was a mistake, and asks for a 5,000 BDT 'refund' to another number."},
+     "description": "A stranger sends 500 BDT, calls to say it was a mistake, and asks for a 5,000 BDT 'refund' to another number.",
+     "title_bn": "'ভুল করে টাকা পাঠিয়েছি' প্রতারণা",
+     "story_bn": "অচেনা একজন আপনাকে ৫০০ টাকা পাঠিয়ে ফোন করে বলল ভুল হয়েছে, এখন অন্য একটি নম্বরে ৫,০০০ টাকা 'ফেরত' দিন। টোপের টাকার চেয়ে অনেক বেশি এবং ভিন্ন নম্বরে চাওয়া হচ্ছে।"},
     {"key": "account_takeover", "title": "Account takeover at night", "expected": "HOLD",
-     "description": "SIM swapped 2 hours ago, PIN reset 10 minutes ago, new phone drains the wallet."},
+     "description": "SIM swapped 2 hours ago, PIN reset 10 minutes ago, new phone drains the wallet.",
+     "title_bn": "রাতে অ্যাকাউন্ট দখল",
+     "story_bn": "প্রতারক ২ ঘণ্টা আগে গ্রাহকের সিম বদলে নিয়েছে, ১০ মিনিট আগে পিন রিসেট করেছে, আর এখন নতুন ফোন থেকে অন্য এলাকা থেকে বড় অঙ্কের টাকা সরিয়ে নিচ্ছে।"},
     {"key": "structuring", "title": "Structured cash-outs", "expected": "WARN/HOLD",
-     "description": "Second cash-out today just below the 25,000 BDT limit at the same agent."},
+     "description": "Second cash-out today just below the 25,000 BDT limit at the same agent.",
+     "title_bn": "সীমার ঠিক নিচে বারবার ক্যাশ আউট",
+     "story_bn": "একই এজেন্টে আজ দ্বিতীয়বার ২৫,০০০ টাকার সীমার ঠিক নিচে ক্যাশ আউট করা হচ্ছে, যাতে নজরদারি এড়ানো যায়।"},
 ]
 
 
@@ -98,6 +110,7 @@ def run_scenario(body: RunScenario, state: AppState = Depends(state_dep),
     typical = state.engine.wallet_summary(cid).get("typical_amount") or 500.0
     base = {"sender": cid, "device_id": device, "geo_cell": cust["home_geo"], "channel": "app"}
     setup: list[str] = []
+    setup_bn: list[str] = []
 
     if body.scenario == "normal_contact":
         to = _top_contact(state, cid, "C")
@@ -116,6 +129,7 @@ def run_scenario(body: RunScenario, state: AppState = Depends(state_dep),
                 "receiver": cid, "device_id": None, "geo_cell": None}
         ingest_committed(state, bait)
         setup.append(f"{forwarders[0]} sent 500 BDT to {cid} 12 minutes ago (bait)")
+        setup_bn.append(f"১২ মিনিট আগে {forwarders[0]} থেকে {cid}-এ ৫০০ টাকা এসেছে (টোপ)")
         tx = {**base, "type": "send_money", "receiver": collectors[-1], "amount": 5000.0}
     elif body.scenario == "account_takeover":
         collectors, _ = _ring_wallets(state)
@@ -123,6 +137,7 @@ def run_scenario(body: RunScenario, state: AppState = Depends(state_dep),
             state.engine.ingest_event({"wallet": cid, "event": "sim_swap", "ts": now - 2 * HOUR})
             state.engine.ingest_event({"wallet": cid, "event": "password_reset", "ts": now - 10 * 60})
         setup += ["SIM swap 2 hours ago", "PIN reset 10 minutes ago"]
+        setup_bn += ["২ ঘণ্টা আগে সিম বদল (SIM swap)", "১০ মিনিট আগে পিন রিসেট"]
         amount = float(min(24_000, max(3000, round(typical * 8 / 100) * 100)))
         tx = {**base, "type": "send_money", "receiver": collectors[0], "amount": amount,
               "device_id": f"DNEW-{cid}", "geo_cell": "CHA-07" if not str(cust["home_geo"]).startswith("CHA") else "DHA-03"}
@@ -132,7 +147,8 @@ def run_scenario(body: RunScenario, state: AppState = Depends(state_dep),
                  "receiver": agent, "device_id": device, "geo_cell": cust["home_geo"]}
         ingest_committed(state, first)
         setup.append(f"Cash-out of 24,700 BDT at {agent} 50 minutes ago")
+        setup_bn.append(f"৫০ মিনিট আগে {agent} এজেন্টে ২৪,৭০০ টাকা ক্যাশ আউট")
         tx = {**base, "type": "cash_out", "receiver": agent, "amount": 24_850.0}
     else:
         raise HTTPException(404, "unknown scenario")
-    return {"scenario": body.scenario, "setup": setup, "transaction": tx}
+    return {"scenario": body.scenario, "setup": setup, "setup_bn": setup_bn, "transaction": tx}

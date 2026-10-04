@@ -47,6 +47,15 @@ export interface Scenario {
   title: string;
   description: string;
   expected: string;
+  title_bn?: string;
+  story_bn?: string;
+}
+
+export interface ScenarioRun {
+  scenario: string;
+  setup: string[];
+  setup_bn?: string[];
+  transaction: TxPayload;
 }
 
 export interface TxPayload {
