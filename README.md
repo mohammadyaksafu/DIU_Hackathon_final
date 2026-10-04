@@ -2,7 +2,7 @@
 
 > **Stop the scam *before* the money leaves.** Shurokkha scores every transfer in milliseconds, explains risk to the customer in plain Bangla, finds money-mule rings in the transaction graph, and gives analysts an AI case summary grounded only in evidence.
 
-**Live demo:** `<add-frontend-url-after-deploy>` · **API docs:** `<add-api-url>/docs` · **Health:** `<add-api-url>/health/ready` · **Video:** `<add-video-link>`
+**Live demo:** https://165-99-219-251.sslip.io · **API docs:** https://165-99-219-251.sslip.io/docs · **Health:** https://165-99-219-251.sslip.io/health/ready · **Video:** `<add-video-link>` · **Report:** [docs/Shurokkha_Project_Report.docx](docs/Shurokkha_Project_Report.docx)
 AI DEV FEST 2026 · DIU CPC × upay AI Hackathon · Track 01 *Trust & Risk Intelligence* (with Track 03 customer empowerment and Track 06 investigation copilot)
 
 > All data in this project is **synthetic**. No real customer, phone number or transaction is used.
@@ -37,6 +37,15 @@ AI DEV FEST 2026 · DIU CPC × upay AI Hackathon · Track 01 *Trust & Risk Intel
 | F8 | Impact & fairness dashboard | Held-out metrics, lift table, per-scenario recall, FPR by segment, live latency |
 | F9 | Synthetic data generator with 6 injected fraud scenarios | Seeded simulation of 7 personas, legit look-alikes and labelled fraud |
 | + | Batch / CSV scoring, behaviour anomaly detection | Isolation Forest (compiled single-row scorer, verified equal to scikit-learn) |
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Home](docs/screenshots/01-home.png) **Overview**: value proposition, live results, decision pipeline | ![Customer HOLD](docs/screenshots/03-customer-hold.png) **Scam interrupt**: account takeover held, Bangla explanation |
+| ![What the AI saw](docs/screenshots/04-customer-ai-tab.png) **What the AI saw**: exact request, flagged new phone and area, risk level vs thresholds, why HOLD | ![Analyst queue](docs/screenshots/05-analyst-queue.png) **Analyst console**: ranked queue with a start-here guide |
+| ![Case](docs/screenshots/06-case.png) **Case view**: evidence, SHAP drivers, mule-ring network, AI summary | ![Impact](docs/screenshots/07-impact.png) **Impact dashboard**: lift, per-scenario recall, fairness |
+| ![Admin](docs/screenshots/08-admin-readonly.png) **Admin**: live policy editing, read-only until the admin password is entered | ![Mobile](docs/screenshots/09-mobile-customer.png) **Mobile**: responsive wallet |
 
 ## 3. Architecture
 
@@ -127,7 +136,9 @@ Backend (`backend/.env`; all optional, safe defaults):
 | `LLM_MODEL` / `LLM_EFFORT` | Anthropic model and effort level | `claude-opus-5-5` / `low` |
 | `LLM_TIMEOUT_SECONDS` | Per-call timeout before template fallback | `30` |
 | `JWT_SECRET` | Signs access tokens; **change in production** | `<random-32-bytes>` |
-| `DEMO_PASSWORD` | Password for demo users `customer` / `analyst` / `admin` | `<choose-one>` (default `demo123`) |
+| `DEMO_PASSWORD` | Password for demo users `customer` / `analyst` (built into the web app, so treat it as public) | `<choose-one>` (default `demo123`) |
+| `ADMIN_PASSWORD` | Admin login (policy / model changes). Never sent to the browser; typed on the Admin page. Empty: admin uses `DEMO_PASSWORD` only when `ENVIRONMENT=development`, otherwise admin login is off | `<random-string>` |
+| `ENVIRONMENT` | `development` or `production` (production disables the demo password for admin) | `development` |
 | `AUTH_REQUIRED` | Disable only for local experiments | `true` |
 | `CORS_ORIGINS` | Allowed web origins (comma-separated; `*.vercel.app` also allowed) | `http://localhost:3000` |
 | `RATE_LIMIT_PER_MINUTE` | Per-IP token bucket; `0` disables | `1200` |
@@ -153,8 +164,9 @@ To enable Gemini, create an API key in Google AI Studio and add `GEMINI_API_KEY=
 
 ## 9. Live deployment URL
 
-- Web: `<add-frontend-url-after-deploy>` · API: `<add-api-url>` (docs at `/docs`, health at `/health/ready`)
-- Recommended hosting: API container on Render/Railway/Fly.io (Dockerfile included), web on Vercel (set `NEXT_PUBLIC_API_URL`), Postgres on Neon/Supabase, Redis on Upstash. Keep a warm-up ping on `/health/live` to avoid free-tier cold starts.
+- **Web:** https://165-99-219-251.sslip.io · **API docs:** https://165-99-219-251.sslip.io/docs · **Health:** https://165-99-219-251.sslip.io/health/ready
+- Hosted on a single VPS with Docker Compose: Caddy (automatic HTTPS) → Next.js web + FastAPI API → PostgreSQL + Redis. Step-by-step guide: [docs/DEPLOY_VPS.md](docs/DEPLOY_VPS.md); one-command update: `deploy/deploy.sh`.
+- The Admin page is read-only for visitors. Changing the live policy or model needs `ADMIN_PASSWORD`, which is set on the server and never built into the website.
 
 ## 10. Testing instructions
 
@@ -183,7 +195,7 @@ The suite covers: expression sandbox safety, policy tiers/overrides/hot-reload, 
 | `backend/knowledge/sop/*.md` | Synthetic SOPs used by the copilot (RAG) |
 | `backend/models/registry/` | Versioned models (`ACTIVE` marks the served one) |
 
-Demo users: `customer`, `analyst`, `admin`, all with `DEMO_PASSWORD`. The web app signs in automatically per page (demo mode).
+Demo users: `customer` and `analyst` with `DEMO_PASSWORD`; the web app signs in as them automatically (demo mode). `admin` uses `ADMIN_PASSWORD` and is never signed in automatically: the Admin page is read-only until you enter it.
 
 ## 12. Results (held-out test window, synthetic data, model `lgbm-20261001-061952`)
 
@@ -197,6 +209,16 @@ Demo users: `customer`, `analyst`, `admin`, all with `DEMO_PASSWORD`. The web ap
 Full system through the real policy: **precision 91.7%, recall 96.2%, false-positive rate 0.24%** (≈5 legitimate customers warned per day in this simulation), HOLD precision 98.2%, **94.3% of victim loss value flagged** before completion. Per scenario: account takeover 100%, prize scam 84%, refund scam 100%, mule forward/cash-out 100%, structuring 94%, social engineering 87%.
 
 Measured latency on a laptop (single Uvicorn worker, client on the same machine): server-side scoring ≈5 ms incl. DB write. End-to-end p50 14.5 ms / p95 26 ms at 1 user (47 req/s); p50 121 ms / p95 181 ms at 10 concurrent users (68 req/s).
+
+### Robustness: beyond the easy test ([docs/reports/robustness.md](docs/reports/robustness.md))
+Synthetic fraud is easier than real fraud, so we also test what happens when the model meets something new (`python -m pipelines.robustness`):
+
+| Test (ML model alone, 1% FPR operating point) | Result |
+|---|---|
+| **New fraud pattern**: retrain without one family, test on it | prize scam 85% · ATO 87% · refund 76% · social engineering 97% caught, though never seen in training. Weak spots: new mule networks 47%, new structuring 0% (in the full system, deterministic rules and the graph detector cover these) |
+| **Brand-new mule ring** (graph features unavailable) | recall 99% → **94%**, PR-AUC 0.995 → 0.958: live behaviour features carry most of the signal |
+| **Calibration** of the displayed probability | ECE 0.0024. Mid-range scores are *conservative*: transfers scored 0.25–0.50 were fraud 96% of the time, which is why a "38%" transfer is correctly held |
+
 
 > **Honest caveat:** these are results on our own synthetic data, whose patterns we designed. They show the pipeline works and that graph features add real lift. Real-world performance must be established with governed upay data (shadow mode first; see the model card).
 

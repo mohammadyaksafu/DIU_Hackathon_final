@@ -3,7 +3,10 @@
 ## External services
 | Service | Use | Required? |
 |---|---|---|
-| Anthropic Claude API (`claude-opus-5-5` by default) | Natural-language case summaries and SOP answers. Never makes risk decisions. | Optional: deterministic templates are used without a key |
+| Google Gemini API (`gemini-3.8-flash` by default; preferred when `GEMINI_API_KEY` is set) | AI chat assistant, natural-language case summaries and SOP answers. Never makes risk decisions. | Optional: deterministic templates are used without a key |
+| Anthropic Claude API (`claude-opus-5-5` by default) | Alternative provider for the same features (`LLM_PROVIDER=anthropic`). Never makes risk decisions. | Optional |
+| Let's Encrypt (via Caddy) | Free HTTPS certificate for the live demo | Deployment only |
+| sslip.io | Free hostname that resolves to the demo server's IP | Deployment only |
 
 ## Pre-trained models
 None. All ML models (LightGBM, Isolation Forest, logistic-regression baseline) are trained from scratch on our synthetic data by `backend/pipelines/train.py`.

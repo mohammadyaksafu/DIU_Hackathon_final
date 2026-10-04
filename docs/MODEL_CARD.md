@@ -15,6 +15,8 @@ Synthetic only (see DATA_ASSUMPTIONS.md): 183,479 transactions, 2,170 fraud (1.1
 ## Thresholds (learned on validation)
 `warn_t` = max(0.05, 99th percentile of legitimate scores) = 0.05 · `hold_t` = lowest score with ≥90% precision (floor warn_t + 0.05) = 0.10. New accounts (<30 d) use `warn_t × 0.8`.
 
+Both thresholds sit on their safety floors. This is expected when legitimate and fraud scores separate cleanly: 99% of legitimate transfers score below 0.05, so the floor (not the percentile) sets WARN. On harder real data the learned values will rise above the floors; the floors stop thresholds from collapsing towards zero.
+
 ## Performance (test window)
 | Metric | Value |
 |---|---|
@@ -27,8 +29,19 @@ Synthetic only (see DATA_ASSUMPTIONS.md): 183,479 transactions, 2,170 fraud (1.1
 
 Lift: rules-only PR-AUC 0.166 → logistic regression 0.822 → LightGBM without graph 0.952 → full 0.995. Graph and anomaly features cut missed fraud at 1% FPR from 6.2% to 0.5%.
 
+## Robustness (`python -m pipelines.robustness`, report: docs/reports/robustness.md)
+| Test (ML model alone, 1% FPR) | Result |
+|---|---|
+| Fraud family never seen in training (leave-one-scenario-out) | prize scam 85% · ATO 87% · refund 76% · social engineering 97% · mule networks 47% · structuring 0% |
+| Brand-new mule ring (graph features unavailable) | recall 99% → 94%, PR-AUC 0.995 → 0.958 |
+| Calibration | ECE 0.0024, Brier 0.0019; mid-range scores are conservative (0.25–0.50 → 96% observed fraud) |
+
+New mule networks and new structuring patterns are the model's weak spots; deterministic rules (near-limit cash-outs, fan-in) and the graph detector cover them in the full system, and new patterns should be added to the generator and retrained as they appear.
+
 ## Fairness (test window, FPR on legitimate transactions)
 Highest: shopkeepers 0.84%, accounts <90 days 0.54%, age 65+ 0.50%. Lowest: professionals 0.04%. Ratios are large because base FPRs are tiny, but they show a real pattern: high-volume small businesses and new users get more friction. Mitigations: merchant-account onboarding (separate thresholds via `segment_overrides`), seller-specific features, and monitoring this report each retrain.
+
+**Customers aged 65+** (0.50% FPR, 3.3× the lowest band) are a core protected persona, so the fix must not weaken their protection. Plan: (1) keep thresholds unchanged for this group; (2) make the friction gentler: route their WARNs to a call-back from a trained agent in Bangla rather than a blocking screen; (3) investigate the driving features (new device and new recipient are common when family members help elderly users) and add a "trusted helper device" signal; (4) track this group's FPR and cancel-after-warning rate monthly, with a target ratio below 2×.
 
 ## Limitations & risks
 - Synthetic patterns are easier than real fraud; expect lower real-world performance and drift as fraudsters adapt.
