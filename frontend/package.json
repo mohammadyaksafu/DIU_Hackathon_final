@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
   },
   "dependencies": {
     "d3-force": "3.0.0",
@@ -21,6 +22,8 @@
     "@types/node": "22.15.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.8",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3"
   }

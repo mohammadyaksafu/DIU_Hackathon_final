@@ -15,7 +15,7 @@ jobs:
       - name: Tests (unit, API, golden scenarios, fallbacks, model quality gate)
         run: python -m pytest
       - name: Dependency audit
-        run: pip-audit -r requirements.txt || true
+        run: pip-audit -r requirements.txt
 
   frontend:
     runs-on: ubuntu-latest
@@ -26,6 +26,7 @@ jobs:
         with: { node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm run build
 
   secrets:

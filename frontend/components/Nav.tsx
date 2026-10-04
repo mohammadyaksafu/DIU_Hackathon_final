@@ -38,7 +38,9 @@ function Icon({ name, className = "h-4 w-4" }: { name: string; className?: strin
 export function Nav() {
   const path = usePathname();
   const [status, setStatus] = useState<string>("checking");
-  const [open, setOpen] = useState(false);
+  // The menu is open only for the page it was opened on, so navigating closes it.
+  const [openOn, setOpenOn] = useState<string | null>(null);
+  const open = openOn === path;
 
   useEffect(() => {
     let alive = true;
@@ -50,8 +52,6 @@ export function Nav() {
       clearInterval(t);
     };
   }, []);
-
-  useEffect(() => setOpen(false), [path]);
 
   // On the customer app, the chat opens in customer mode.
   const hrefFor = (href: string) => (href === "/chat" && path.startsWith("/customer") ? "/chat?audience=customer" : href);
@@ -99,7 +99,7 @@ export function Nav() {
             </span>
             API {status}
           </span>
-          <button className="grid h-9 w-9 place-items-center rounded-lg border border-line bg-surface text-ink-2 xl:hidden" onClick={() => setOpen(!open)}
+          <button className="grid h-9 w-9 place-items-center rounded-lg border border-line bg-surface text-ink-2 xl:hidden" onClick={() => setOpenOn(open ? null : path)}
             aria-expanded={open} aria-label={open ? "Close menu" : "Open menu"}>
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
               <path d={open ? "M6 6l12 12M18 6L6 18" : "M4 7h16M4 12h16M4 17h16"} />

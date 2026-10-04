@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useCallback, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useEffectEvent, useState } from "react";
 
 import type { Decision } from "@/lib/types";
 
@@ -121,6 +121,29 @@ export function ErrorBox({ error, onRetry }: { error: string; onRetry?: () => vo
   );
 }
 
+/**
+ * Risk level relative to the policy's own thresholds. A calibrated fraud probability of 0.38 looks
+ * "low" in isolation, but with a ~1% base rate and a HOLD line near 0.10 it is very high, so the
+ * raw number is always shown next to the thresholds it is judged against.
+ */
+export function RiskLevel({ score, warnT, holdT, decision }: { score: number; warnT?: number; holdT?: number; decision: Decision }) {
+  const level = decision === "HOLD" ? "High" : decision === "WARN" ? "Medium" : "Low";
+  const cls = { High: "bg-critical-soft text-critical-text border-critical/40", Medium: "bg-warning-soft text-warning-text border-warning/50", Low: "bg-good-soft text-good-text border-good/40" }[level];
+  const ref = decision === "HOLD" ? holdT : decision === "WARN" ? warnT : warnT;
+  const ratio = ref && ref > 0 ? score / ref : null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2 text-sm text-ink-2">
+      <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${cls}`}>{level} risk</span>
+      <span className="tabular">
+        fraud probability <strong className="text-ink">{(score * 100).toFixed(1)}%</strong>
+        {holdT != null && warnT != null && (
+          <span className="text-muted"> · WARN from {(warnT * 100).toFixed(0)}%, HOLD from {(holdT * 100).toFixed(0)}%{ratio && decision !== "ALLOW" ? ` (${ratio.toFixed(1)}× the ${decision} line)` : ""}</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
 /** Horizontal meter for a 0..1 score; value is always printed next to the bar. */
 export function ScoreBar({ value, label, threshold }: { value: number; label: string; threshold?: number }) {
   const pct = Math.max(0, Math.min(1, value)) * 100;
@@ -138,23 +161,25 @@ export function ScoreBar({ value, label, threshold }: { value: number; label: st
   );
 }
 
-/** Small data-loading hook with retry. */
+/** Small data-loading hook with retry. Refetches when `deps` change or `reload()` is called. */
 export function useApi<T>(fn: () => Promise<T>, deps: unknown[] = []) {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const run = useCallback(fn, deps);
-  const reload = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    run()
-      .then(setData)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [run]);
+  const [state, setState] = useState<{ data: T | null; error: string | null; done: string | null }>({ data: null, error: null, done: null });
+  const [nonce, setNonce] = useState(0);
+  const key = `${JSON.stringify(deps)}#${nonce}`;
+  const load = useEffectEvent(() => fn());
+
   useEffect(() => {
-    reload();
-  }, [reload]);
-  return { data, error, loading, reload, setData };
+    let alive = true;
+    load()
+      .then((data) => alive && setState({ data, error: null, done: key }))
+      .catch((e: Error) => alive && setState((s) => ({ data: s.data, error: e.message, done: key })));
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  const setData = useCallback((data: T | null) => setState((s) => ({ ...s, data })), []);
+  // Loading until the request for the current key has settled; stale data stays visible meanwhile.
+  return { data: state.data, error: state.done === key ? state.error : null, loading: state.done !== key, reload, setData };
 }
