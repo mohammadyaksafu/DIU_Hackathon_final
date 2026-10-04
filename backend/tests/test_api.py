@@ -35,6 +35,21 @@ def test_auth_and_roles(client, customer_h, analyst_h):
     assert client.post("/api/v1/auth/login", json={"username": "admin", "password": "wrong"}).status_code == 401
 
 
+def test_admin_never_accepts_public_demo_password(client, monkeypatch):
+    """DEMO_PASSWORD ships to every browser, so it must not unlock admin outside development."""
+    from app.core.config import get_settings
+
+    s = get_settings()
+    login = lambda pw: client.post("/api/v1/auth/login", json={"username": "admin", "password": pw}).status_code
+    monkeypatch.setattr(s, "environment", "production")
+    monkeypatch.setattr(s, "admin_password", "")
+    assert login("demo123") == 401  # production without ADMIN_PASSWORD: admin login is off
+    monkeypatch.setattr(s, "admin_password", "s3cret-admin")
+    assert login("demo123") == 401  # demo password never works for admin
+    assert login("s3cret-admin") == 200
+    assert client.post("/api/v1/auth/login", json={"username": "analyst", "password": "demo123"}).status_code == 200
+
+
 def test_input_validation(client, customer_h):
     bad = {"type": "send_money", "amount": -5, "sender": "C1", "receiver": "C2"}
     assert client.post("/api/v1/score", headers=customer_h, json=bad).status_code == 422

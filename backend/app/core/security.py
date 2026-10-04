@@ -16,13 +16,25 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 def demo_users() -> dict[str, str]:
-    """username -> role. All demo users share DEMO_PASSWORD (synthetic demo only)."""
+    """username -> role. customer and analyst share DEMO_PASSWORD (synthetic demo only)."""
     return {"customer": "customer", "analyst": "analyst", "admin": "admin"}
+
+
+def _expected_password(role: str) -> str | None:
+    """Password for a role, or None when that login is disabled."""
+    s = get_settings()
+    if role != "admin":
+        return s.demo_password
+    if s.admin_password:
+        return s.admin_password
+    # DEMO_PASSWORD is public (it is built into the web app), so it may unlock admin only in development.
+    return s.demo_password if s.environment == "development" else None
 
 
 def authenticate(username: str, password: str) -> str | None:
     role = demo_users().get(username)
-    if role and hmac.compare_digest(password.encode(), get_settings().demo_password.encode()):
+    expected = _expected_password(role) if role else None
+    if expected and hmac.compare_digest(password.encode(), expected.encode()):
         return role
     return None
 

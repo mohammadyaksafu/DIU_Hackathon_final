@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 720
     auth_required: bool = True
     demo_password: str = "demo123"
+    # The admin account never uses the public demo password: the web app ships DEMO_PASSWORD to every
+    # browser. Empty => admin uses DEMO_PASSWORD only in development; in production admin login is off.
+    admin_password: str = ""
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     rate_limit_per_minute: int = 1200
 
