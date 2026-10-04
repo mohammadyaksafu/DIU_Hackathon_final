@@ -71,7 +71,9 @@ CHAT_SCHEMA = {
     "additionalProperties": False,
 }
 
-_NUM = re.compile(r"(?<![A-Za-z_#-])\d[\d,]*(?:\.\d+)?")
+# A number starts after a non-identifier character: "SOP-05" or "R_X1" are ids, not amounts. Excluding
+# digits and "." matters too, otherwise the "5" in "SOP-05" is matched on its own.
+_NUM = re.compile(r"(?<![A-Za-z_#\-\d.])\d[\d,]*(?:\.\d+)?")
 
 
 def _fmt_ts(ts: float) -> str:

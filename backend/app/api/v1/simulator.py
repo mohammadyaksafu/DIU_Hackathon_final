@@ -5,6 +5,8 @@ return the transfer to score. Scoring still goes through the normal /score endpo
 """
 from __future__ import annotations
 
+import zlib
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -44,12 +46,21 @@ SCENARIOS = [
 ]
 
 
-def _ring_wallets(state: AppState) -> tuple[list[str], list[str]]:
+def _ring_wallets(state: AppState, cid: str) -> tuple[list[str], list[str]]:
+    """Collector / forwarder wallets of a mule ring that is still active at the end of the data.
+
+    The ring is chosen per customer (stable hash), so different demo customers pay different
+    mule wallets instead of one well-known account.
+    """
     rings = state.data_meta.get("rings") or []
     if not rings:
         raise HTTPException(503, "no synthetic ring metadata available")
-    last = rings[-1]
-    return last["collectors"], last["forwarders"] or last["collectors"]
+    last_day = max(r["end"] for r in rings)
+    active = [r for r in rings if r["end"] >= last_day - 1] or rings[-1:]
+    h = zlib.crc32(cid.encode())
+    ring = active[h % len(active)]
+    collectors = ring["collectors"][(h // len(active)) % len(ring["collectors"]):] + ring["collectors"][: (h // len(active)) % len(ring["collectors"])]
+    return collectors, ring["forwarders"] or collectors
 
 
 def _current_device(state: AppState, wallet: str) -> str | None:
@@ -121,10 +132,10 @@ def run_scenario(body: RunScenario, state: AppState = Depends(state_dep),
         to = _top_contact(state, cid, "M0") or "M0001"
         tx = {**base, "type": "payment", "receiver": to, "amount": float(round(typical * 0.8 / 10) * 10)}
     elif body.scenario == "prize_scam":
-        collectors, _ = _ring_wallets(state)
+        collectors, _ = _ring_wallets(state, cid)
         tx = {**base, "type": "send_money", "receiver": collectors[0], "amount": 2000.0}
     elif body.scenario == "refund_scam":
-        collectors, forwarders = _ring_wallets(state)
+        collectors, forwarders = _ring_wallets(state, cid)
         bait = {"tx_id": None, "ts": now - 12 * 60, "type": "send_money", "amount": 500.0, "sender": forwarders[0],
                 "receiver": cid, "device_id": None, "geo_cell": None}
         ingest_committed(state, bait)
@@ -132,7 +143,7 @@ def run_scenario(body: RunScenario, state: AppState = Depends(state_dep),
         setup_bn.append(f"১২ মিনিট আগে {forwarders[0]} থেকে {cid}-এ ৫০০ টাকা এসেছে (টোপ)")
         tx = {**base, "type": "send_money", "receiver": collectors[-1], "amount": 5000.0}
     elif body.scenario == "account_takeover":
-        collectors, _ = _ring_wallets(state)
+        collectors, _ = _ring_wallets(state, cid)
         with state.lock:
             state.engine.ingest_event({"wallet": cid, "event": "sim_swap", "ts": now - 2 * HOUR})
             state.engine.ingest_event({"wallet": cid, "event": "password_reset", "ts": now - 10 * 60})

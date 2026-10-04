@@ -146,6 +146,13 @@ def test_grounding_rejects_invented_numbers():
     assert not bad and "75000" in ungrounded
 
 
+def test_grounding_ignores_identifiers():
+    """SOP / reason-code ids are not amounts: 'SOP-05' must not be read as the number 5."""
+    evidence = {"alert": {"amount_bdt": 2000}}
+    ok, ungrounded = numbers_grounded({"recommended_actions": ["Verify the customer (SOP-05).", "Check R_X12 and SOP-04#2."]}, evidence)
+    assert ok, ungrounded
+
+
 def test_template_narrative_without_llm():
     evidence = {
         "alert": {"alert_id": 1, "decision": "HOLD", "risk_score": 0.99, "transaction_type": "send_money", "amount_bdt": 9000,
