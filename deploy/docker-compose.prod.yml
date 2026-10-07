@@ -18,6 +18,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Append-only file: live feature history survives a Redis restart too.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
 
   api:
     build: ../backend
@@ -25,6 +28,9 @@ services:
     environment:
       DATABASE_URL: postgresql://shurokkha:${POSTGRES_PASSWORD}@postgres:5432/shurokkha
       REDIS_URL: redis://redis:6379/0
+      # API worker processes. The online state is shared in Redis, so more than one is safe;
+      # each worker holds its own copy of the model, so raise API_WORKERS only on a VPS with spare RAM.
+      WEB_CONCURRENCY: ${API_WORKERS:-1}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       DEMO_PASSWORD: ${DEMO_PASSWORD:?set DEMO_PASSWORD in .env}
       # Admin never uses the public demo password. Without ADMIN_PASSWORD, admin login is disabled.
@@ -70,5 +76,6 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   caddy_data:
   caddy_config:

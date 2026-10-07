@@ -1,4 +1,5 @@
 # One command: docker compose up --build   ->  web http://localhost:3000 · API http://localhost:8000/docs
+# With monitoring: docker compose --profile monitoring up --build  ->  Grafana http://localhost:3001 (admin / admin)
 services:
   postgres:
     image: postgres:16-alpine
@@ -14,12 +15,17 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Append-only file: live feature history survives a Redis restart too.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
 
   api:
     build: ./backend
     environment:
       DATABASE_URL: postgresql://shurokkha:shurokkha@postgres:5432/shurokkha
       REDIS_URL: redis://redis:6379/0
+      # Two workers share the online feature state, rate limits and live graph edges through Redis.
+      WEB_CONCURRENCY: ${API_WORKERS:-2}
       JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-demo123}
       LLM_PROVIDER: ${LLM_PROVIDER:-auto}
@@ -27,6 +33,7 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CORS_ORIGINS: http://localhost:3000
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-1200}
     ports: ["8000:8000"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -41,5 +48,26 @@ services:
     ports: ["3000:3000"]
     depends_on: [api]
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: [monitoring]
+    volumes: ["./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+    depends_on: [api]
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    profiles: [monitoring]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/shurokkha.json
+    volumes:
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+
 volumes:
   pgdata:
+  redisdata:

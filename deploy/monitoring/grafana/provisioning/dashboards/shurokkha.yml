@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: shurokkha
+    folder: Shurokkha
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
