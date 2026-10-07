@@ -12,11 +12,21 @@ from __future__ import annotations
 
 from typing import Callable
 
-from app.features.engine import CASH_OUT_LIMIT, STREAM_FEATURES, FeatureEngine
+from app.features.engine import AGENT_FEATURES, CASH_OUT_LIMIT, STREAM_FEATURES, FeatureEngine
 from app.graph.snapshot import GRAPH_FEATURES, graph_features_for
 
 DerivedFn = Callable[[dict, dict], float]
 _DERIVED: dict[str, DerivedFn] = {}
+
+# Registered merchant / online-seller profiles (onboarded business wallets). Many new payers are
+# normal for them, so the mule-network signals are merchant-aware. Set at boot and in the pipeline.
+MERCHANT_PROFILES: set[str] = set()
+MERCHANT_PERSONAS = ("shopkeeper", "fcommerce_seller")
+
+
+def set_merchant_profiles(wallet_ids) -> None:
+    MERCHANT_PROFILES.clear()
+    MERCHANT_PROFILES.update(wallet_ids)
 
 
 def feature(name: str):
@@ -48,13 +58,30 @@ def _new_device_new_recipient(f: dict, tx: dict) -> float:
     return float(_recent_device(f, tx) * f["is_new_recipient"])
 
 
-# Computed (for rules/explanations) but not used as model inputs: raw clock hour is a
-# dataset artefact; the model uses the behavioural s_hour_freq / is_night instead.
-NON_MODEL_FEATURES = {"hour"}
+@feature("r_merchant_profile")
+def _r_merchant_profile(f: dict, tx: dict) -> float:
+    return float(tx["receiver"] in MERCHANT_PROFILES)
+
+
+@feature("s_merchant_profile")
+def _s_merchant_profile(f: dict, tx: dict) -> float:
+    return float(tx["sender"] in MERCHANT_PROFILES)
+
+
+@feature("on_call")
+def _on_call(f: dict, tx: dict) -> float:
+    """The app reports an active phone call while the transfer is made (a social-engineering signal)."""
+    return float(bool(tx.get("on_call")))
+
+
+# Computed (for rules/explanations/detectors) but not used as model inputs: raw clock hour is a
+# dataset artefact; profiles, call state and agent counters drive rules and detectors instead,
+# so they can change without retraining the model.
+NON_MODEL_FEATURES = {"hour", "r_merchant_profile", "s_merchant_profile", "on_call", *AGENT_FEATURES}
 
 
 def all_feature_names() -> list[str]:
-    return STREAM_FEATURES + GRAPH_FEATURES + list(_DERIVED)
+    return STREAM_FEATURES + AGENT_FEATURES + GRAPH_FEATURES + list(_DERIVED)
 
 
 def model_feature_names() -> list[str]:

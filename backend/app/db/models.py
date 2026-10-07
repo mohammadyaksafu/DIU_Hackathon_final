@@ -39,6 +39,9 @@ class Alert(Base):
     scenario_tag: Mapped[str | None] = mapped_column(String(32), nullable=True)  # synthetic ground truth (seed only)
     opened_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     decided_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Customer appeal ("this wasn't fraud"): jumps the analyst queue, answered within the SOP-05 SLA.
+    appealed_at: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    appeal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (Index("ix_alerts_status_risk", "status", "risk_score"),)
 
@@ -96,3 +99,18 @@ class Narrative(Base):
     created_at: Mapped[float] = mapped_column(Float, default=_now)
     provider: Mapped[str] = mapped_column(String(32))
     content: Mapped[dict] = mapped_column(JSON)
+
+
+class StudyResponse(Base):
+    """One decision in the WARN user study (anonymous; participant is a random code)."""
+
+    __tablename__ = "study_responses"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[float] = mapped_column(Float, default=_now)
+    participant: Mapped[str] = mapped_column(String(32), index=True)
+    arm: Mapped[str] = mapped_column(String(1), index=True)  # A no warning | B generic | C Shurokkha
+    scenario: Mapped[str] = mapped_column(String(32))
+    is_scam: Mapped[int] = mapped_column(Integer)
+    action: Mapped[str] = mapped_column(String(16))  # sent | cancelled
+    seconds: Mapped[float] = mapped_column(Float)
+    trust: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 self-reported

@@ -8,6 +8,7 @@ import json
 import logging
 import threading
 import time
+from contextlib import contextmanager, nullcontext
 from typing import Any
 
 from app.core.config import get_settings
@@ -35,6 +36,17 @@ class Cache:
     @property
     def backend(self) -> str:
         return "redis" if self._redis is not None else "memory"
+
+    @property
+    def redis(self):
+        """The shared Redis client, or None when running on in-memory fallbacks."""
+        return self._redis
+
+    def lock(self, name: str, timeout: float = 60.0):
+        """A lock shared by every API worker (Redis), or a no-op with a single in-memory worker."""
+        if self._redis is None:
+            return nullcontext()
+        return _redis_lock(self._redis, f"shurokkha:lock:{name}", timeout)
 
     def get(self, key: str) -> Any | None:
         if self._redis is not None:
@@ -65,6 +77,20 @@ class Cache:
             if len(self._mem) > 5000:
                 self._mem.clear()
             self._mem[key] = (time.time() + ttl, raw)
+
+
+@contextmanager
+def _redis_lock(client, key: str, timeout: float):
+    lock = client.lock(key, timeout=timeout, blocking_timeout=timeout)
+    if not lock.acquire():
+        raise TimeoutError(f"could not acquire {key}")
+    try:
+        yield
+    finally:
+        try:
+            lock.release()
+        except Exception:  # expired while held; the work is done either way
+            pass
 
 
 _cache: Cache | None = None

@@ -17,13 +17,26 @@ class GraphStore:
         self.edges: deque = deque()  # (ts, src, dst, amount, type)
         self.snapshot: dict[str, dict] = {}
         self.snapshot_built_at: float | None = None
+        self.shared = None  # features.store.SharedEdges when several workers share live edges via Redis
         self._lock = threading.RLock()
 
     def add_edge(self, tx: dict) -> None:
         if tx["type"] not in GRAPH_EDGE_TYPES:
             return
+        edge = (float(tx["ts"]), tx["sender"], tx["receiver"], float(tx["amount"]), tx["type"])
+        if self.shared is not None:
+            self.shared.push(edge)
+            self._sync()
+            return
         with self._lock:
-            self.edges.append((float(tx["ts"]), tx["sender"], tx["receiver"], float(tx["amount"]), tx["type"]))
+            self.edges.append(edge)
+
+    def _sync(self) -> None:
+        """Pull live edges that other workers added (no-op without Redis)."""
+        if self.shared is None:
+            return
+        with self._lock:
+            self.edges.extend(self.shared.pull())
 
     def _prune(self) -> None:
         if not self.edges:
@@ -33,6 +46,7 @@ class GraphStore:
             self.edges.popleft()
 
     def refresh(self) -> dict:
+        self._sync()
         with self._lock:
             self._prune()
             edges = list(self.edges)
@@ -44,6 +58,7 @@ class GraphStore:
 
     def subgraph(self, wallet: str, hops: int = 2, max_nodes: int = 60) -> dict:
         """k-hop neighbourhood (both directions) aggregated by wallet pair."""
+        self._sync()
         with self._lock:
             edges = list(self.edges)
             snap = self.snapshot

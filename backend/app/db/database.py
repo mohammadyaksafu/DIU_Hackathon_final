@@ -41,9 +41,30 @@ def get_engine():
 
 
 def init_db() -> None:
+    with get_engine().begin() as conn:
+        migrate(conn)
+
+
+def migrate(conn) -> None:
+    """Bring the schema to the latest Alembic revision (migrations/versions).
+
+    Databases created before migrations existed (by create_all) are stamped at the initial revision
+    first, so their data is kept and later migrations apply on top.
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    from app.core.config import BACKEND_DIR
     from app.db import models  # noqa: F401  (register tables)
 
-    Base.metadata.create_all(get_engine())
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    cfg.attributes["connection"] = conn
+    tables = set(inspect(conn).get_table_names())
+    if "alembic_version" not in tables and "alerts" in tables:
+        command.stamp(cfg, "0001")
+    command.upgrade(cfg, "head")
 
 
 @contextmanager

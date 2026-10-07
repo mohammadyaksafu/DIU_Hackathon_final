@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 
 HOUR = 3600.0
@@ -65,6 +66,11 @@ STREAM_FEATURES = [
 ]
 
 
+# Agent-side cash-out features (computed only for cash-outs at an agent). Used by the agent
+# cash-out detector and rules; not model inputs, so adding them needs no retrain.
+AGENT_FEATURES = ["a_cashouts_1h", "a_new_customers_1h", "a_cashout_rate_ratio"]
+
+
 def is_customer_wallet(wallet_id: str) -> bool:
     return wallet_id.startswith("C")
 
@@ -99,8 +105,14 @@ class WalletState:
 
 class FeatureEngine:
     def __init__(self) -> None:
+        # A dict offline and in a single worker; a RedisWalletStore when the state is shared (features/store.py).
+        # Mutated states are always assigned back, so both backends see every change.
         self.wallets: dict[str, WalletState] = {}
         self.last_ts: float = 0.0
+
+    def _locked(self, *wallet_ids: str):
+        locked = getattr(self.wallets, "locked", None)
+        return locked(*wallet_ids) if locked else nullcontext()
 
     # ---- state management -------------------------------------------------
     def _get(self, wallet_id: str) -> WalletState:
@@ -111,19 +123,23 @@ class FeatureEngine:
         return st
 
     def register_wallet(self, wallet_id: str, signup_ts: float | None, device_id: str | None = None) -> None:
-        st = self._get(wallet_id)
-        if signup_ts is not None and (st.first_seen is None or signup_ts < st.first_seen):
-            st.first_seen = signup_ts
-        if device_id and device_id not in st.devices:
-            st.devices[device_id] = signup_ts or 0.0
+        with self._locked(wallet_id):
+            st = self._get(wallet_id)
+            if signup_ts is not None and (st.first_seen is None or signup_ts < st.first_seen):
+                st.first_seen = signup_ts
+            if device_id and device_id not in st.devices:
+                st.devices[device_id] = signup_ts or 0.0
+            self.wallets[wallet_id] = st
 
     def ingest_event(self, event: dict) -> None:
         """Security events: sim_swap, password_reset."""
-        st = self._get(event["wallet"])
-        if event["event"] == "sim_swap":
-            st.sim_swap = event["ts"]
-        elif event["event"] == "password_reset":
-            st.pwd_reset = event["ts"]
+        with self._locked(event["wallet"]):
+            st = self._get(event["wallet"])
+            if event["event"] == "sim_swap":
+                st.sim_swap = event["ts"]
+            elif event["event"] == "password_reset":
+                st.pwd_reset = event["ts"]
+            self.wallets[event["wallet"]] = st
         self.last_ts = max(self.last_ts, event["ts"])
 
     # ---- features ------------------------------------------------------------
@@ -195,6 +211,21 @@ class FeatureEngine:
                     break
                 r_out_sum += amt
 
+        # Agent velocity: how many wallets cashed out here in the last hour, how many of them
+        # for the first time, and how that compares with this agent's normal hourly rate.
+        a_cash_1h: set = set()
+        a_new_1h = 0
+        a_ratio = 0.0
+        if ttype == "cash_out" and tx["receiver"].startswith("A"):
+            for ts, amt, snd, t, first in reversed(r.inn):
+                if now - ts > HOUR:
+                    break
+                if t == "cash_out" and snd not in a_cash_1h:
+                    a_cash_1h.add(snd)
+                    a_new_1h += int(first)
+            span_h = max(1.0, (now - r.inn[0][0]) / HOUR) if r.inn else 1.0
+            a_ratio = round(min(20.0, (len(a_cash_1h) + 1) / max(len(r.inn) / span_h, 0.5)), 3)
+
         hour = local_hour(now)
         total_hours = sum(s.hours)
         hour_freq = (
@@ -239,14 +270,21 @@ class FeatureEngine:
             "s_new_sender_inflow_1h": new_sender_inflow_1h,
             "near_limit": int(ttype == "cash_out" and amount >= 0.94 * CASH_OUT_LIMIT),
             "s_cashout_cnt_24h": cashout_24h,
+            "a_cashouts_1h": len(a_cash_1h),
+            "a_new_customers_1h": a_new_1h,
+            "a_cashout_rate_ratio": a_ratio,
         }
 
     def update(self, tx: dict) -> None:
+        with self._locked(tx["sender"], tx["receiver"]):
+            self._update(tx)
+
+    def _update(self, tx: dict) -> None:
         now = float(tx["ts"])
         amount = float(tx["amount"])
         ttype = tx["type"]
         s = self._get(tx["sender"])
-        r = self._get(tx["receiver"])
+        r = s if tx["receiver"] == tx["sender"] else self._get(tx["receiver"])
         for st in (s, r):
             if st.first_seen is None:
                 st.first_seen = now
@@ -268,6 +306,8 @@ class FeatureEngine:
         r.known_in.add(tx["sender"])
         s.prune(now)
         r.prune(now)
+        self.wallets[tx["sender"]] = s
+        self.wallets[tx["receiver"]] = r
         self.last_ts = max(self.last_ts, now)
 
     def wallet_summary(self, wallet_id: str) -> dict:

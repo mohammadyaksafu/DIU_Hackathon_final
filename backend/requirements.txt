@@ -4,6 +4,7 @@ uvicorn[standard]==0.30.6
 pydantic==2.9.2
 pydantic-settings==2.5.2
 SQLAlchemy==2.0.30
+alembic==1.16.5
 PyJWT==2.15.1
 PyYAML==6.0.3
 orjson==3.11.9
@@ -24,3 +25,4 @@ psycopg[binary]==3.2.3
 # --- Tests ---
 pytest==9.1.1
 httpx==0.28.1
+fakeredis[lua]==2.26.2

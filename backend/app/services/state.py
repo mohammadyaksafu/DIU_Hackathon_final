@@ -4,6 +4,7 @@ Boot order (each step degrades gracefully instead of crashing the API):
   1. Bootstrap data + model if missing (AUTO_BOOTSTRAP)
   2. Load the active model bundle    -> on failure: rules-only mode
   3. Load the warm online state      -> on failure: cold engine (features still computed)
+     and share it through Redis when REDIS_URL is set -> on failure: this worker keeps it in memory
   4. Build detectors + policy
   5. Seed analyst alerts (SEED_ON_BOOT)
   6. Start the background graph refresher (cold path)
@@ -23,6 +24,7 @@ from app.core.config import Settings, get_settings
 from app.detectors.base import DetectorDeps
 from app.detectors.registry import DetectorRegistry
 from app.features.engine import FeatureEngine
+from app.features.registry import MERCHANT_PERSONAS, set_merchant_profiles
 from app.graph.store import GraphStore
 from app.policy.engine import PolicyEngine
 from app.services import model_registry
@@ -44,6 +46,8 @@ class AppState:
         self.boot_wall = time.time()
         self.sim_origin = 0.0
         self.degraded: list[str] = []
+        self.shared_state = False  # online state lives in Redis (several workers, survives restarts)
+        self._model_checked = 0.0
         self._stop = threading.Event()
         self._refresher: threading.Thread | None = None
 
@@ -57,12 +61,14 @@ class AppState:
             run(s.data_dir, s.models_dir, s.config_dir, s.data_dir.parent / "reports", verbose=False)
         self.load_model(s.active_model)
         self.load_online_state()
+        self.share_online_state()
         meta_path = s.data_dir / "raw" / "meta.json"
         if meta_path.exists():
             self.data_meta = json.loads(meta_path.read_text(encoding="utf-8"))
         cust_path = s.data_dir / "raw" / "customers.parquet"
         if cust_path.exists():
             self.customers = pd.read_parquet(cust_path).set_index("id")
+            set_merchant_profiles(self.customers.index[self.customers.persona.isin(MERCHANT_PERSONAS)])
         # Simulation clock continues after the synthetic history, aligned to the real
         # Dhaka time of day so a demo at 3 pm is scored as 3 pm.
         end = max(self.engine.last_ts, float(self.data_meta.get("end_ts", time.time())))
@@ -99,6 +105,39 @@ class AppState:
         except Exception as exc:
             logger.error("online state unavailable, starting cold: %s", exc)
             self.degraded.append("online_state")
+
+    def share_online_state(self) -> None:
+        """Move the online state into Redis so every API worker reads and writes the same history."""
+        s = self.settings
+        if s.feature_store == "memory" or not s.redis_url:
+            if s.feature_store == "redis":
+                self.degraded.append("shared_state")
+            return
+        from app.features import store
+
+        try:
+            client = store.connect(s.redis_url)
+            fingerprint = f"{self.bundle.version if self.bundle else 'none'}:{self.engine.last_ts}"
+            with client.lock(store.PREFIX + "seed-lock", timeout=300, blocking_timeout=300):
+                store.seed(client, self.engine.wallets, fingerprint)
+            self.engine.wallets = store.RedisWalletStore(client)
+            self.graph.shared = store.SharedEdges(client)
+            self.graph.refresh()
+            self.shared_state = True
+        except Exception as exc:
+            logger.error("redis online state unavailable, keeping it in this worker's memory: %s", exc)
+            if s.feature_store == "redis":
+                self.degraded.append("shared_state")
+
+    def sync_model(self) -> None:
+        """Follow model activations made through another worker (the ACTIVE file is shared)."""
+        now = time.monotonic()
+        if self.settings.active_model or now - self._model_checked < 5:
+            return
+        self._model_checked = now
+        version = model_registry.active_version(self.settings.models_dir)
+        if version and self.bundle is not None and version != self.bundle.version:
+            self.load_model(version)
 
     # ------------------------------------------------------------ simulation
     def sim_now(self) -> float:

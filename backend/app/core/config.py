@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # Storage
     database_url: str = ""  # default: SQLite file inside data_dir
     redis_url: str = ""  # optional; in-memory cache when empty
+    # Online feature state: auto => Redis when REDIS_URL is reachable (several workers), else memory (one worker)
+    feature_store: str = "auto"  # auto | memory | redis
 
     # Model / scoring
     active_model: str = ""  # registry version; empty => models/registry/ACTIVE

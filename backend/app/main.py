@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import func, select, text
 
 from app.api.deps import get_gateway, get_retriever
-from app.api.v1 import admin, auth, cases, insights, score, simulator
+from app.api.v1 import admin, auth, cases, insights, score, simulator, study
 from app.core.cache import get_cache
 from app.core.config import get_settings
 from app.core.logging import request_id_var, setup_logging
@@ -46,15 +46,18 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging()
     started = time.time()
-    init_db()
+    with get_cache().lock("migrate", timeout=120):  # several workers boot at once
+        init_db()
     state = get_state()
     state.boot()
     if settings.seed_on_boot:
-        n = seed_alerts()
+        with get_cache().lock("seed-alerts"):
+            n = seed_alerts()
         if n:
             logger.info("seeded alerts", extra={"extra_fields": {"count": n}})
     get_retriever()
     state.start_background()
+    metrics.start_publisher()
     logger.info("startup complete", extra={"extra_fields": {
         "seconds": round(time.time() - started, 2), "model": state.bundle.version if state.bundle else None,
         "llm": get_gateway().status(), "degraded": state.degraded}})
@@ -102,7 +105,7 @@ async def request_context(request: Request, call_next):
     return response
 
 
-for r in (auth.router, score.router, simulator.router, cases.router, insights.router, admin.router):
+for r in (auth.router, score.router, simulator.router, cases.router, insights.router, admin.router, study.router):
     app.include_router(r, prefix="/api/v1")
 
 
@@ -132,6 +135,7 @@ def ready():
     checks["graph_snapshot_wallets"] = len(state.graph.snapshot)
     checks["llm"] = get_gateway().status()
     checks["cache"] = get_cache().backend
+    checks["online_state"] = "redis (shared by all workers)" if state.shared_state else "memory (single worker)"
     healthy = checks["database"] == "ok" and bool(checks["detectors"])
     status = "ok" if healthy and not state.degraded else ("degraded" if healthy else "unavailable")
     return JSONResponse({"status": status, "degraded": state.degraded, "checks": checks}, status_code=200 if healthy else 503)
