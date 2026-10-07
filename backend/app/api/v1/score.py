@@ -35,6 +35,40 @@ def confirm(tx_id: str, body: ConfirmRequest, state: AppState = Depends(state_de
     return confirm_transaction(state, tx_id, body.action, p.username)
 
 
+class AppealRequest(BaseModel):
+    note: str = Field(default="", max_length=500, description="Customer's own words; untrusted, shown to the analyst only")
+
+
+APPEAL_SLA_MINUTES = 15  # SOP-05 review target
+
+
+@router.post("/transactions/{tx_id}/appeal")
+def appeal(tx_id: str, body: AppealRequest, p: Principal = Depends(require_roles("customer"))) -> dict:
+    """'This wasn't fraud': the case jumps the analyst queue. A 'legit' label releases a HOLD and the
+    label is stored as feedback for retraining."""
+    import time
+
+    from app.db.database import session_scope
+    from app.db.models import Alert, AuditLog, ScoredTransaction
+
+    with session_scope() as db:
+        st = db.get(ScoredTransaction, tx_id)
+        if st is None or st.alert_id is None:
+            raise HTTPException(404, "no flagged transaction with this id")
+        alert = db.get(Alert, st.alert_id)
+        if alert.label is not None:
+            return {"transaction_id": tx_id, "status": "already_reviewed", "label": alert.label}
+        if alert.appealed_at is None:
+            alert.appealed_at = time.time()
+            alert.appeal_note = body.note.strip() or None
+            if alert.status == "OPEN":
+                alert.status = "INVESTIGATING"
+            db.add(AuditLog(actor=p.username, event="customer_appeal", tx_id=tx_id, alert_id=alert.id,
+                            payload={"note": body.note[:200]}))
+        return {"transaction_id": tx_id, "alert_id": alert.id, "status": "appealed", "appealed_at": alert.appealed_at,
+                "sla_minutes": APPEAL_SLA_MINUTES}
+
+
 @router.post("/events")
 def security_event(ev: SecurityEvent, state: AppState = Depends(state_dep),
                    p: Principal = Depends(require_roles("customer", "analyst"))) -> dict:

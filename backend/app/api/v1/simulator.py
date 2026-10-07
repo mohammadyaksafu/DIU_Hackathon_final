@@ -43,6 +43,14 @@ SCENARIOS = [
      "description": "Second cash-out today just below the 25,000 BDT limit at the same agent.",
      "title_bn": "সীমার ঠিক নিচে বারবার ক্যাশ আউট",
      "story_bn": "একই এজেন্টে আজ দ্বিতীয়বার ২৫,০০০ টাকার সীমার ঠিক নিচে ক্যাশ আউট করা হচ্ছে, যাতে নজরদারি এড়ানো যায়।"},
+    {"key": "on_call_scam", "title": "Coached on a phone call", "expected": "WARN/HOLD",
+     "description": "A caller stays on the line and talks the customer into sending twice their usual amount to a new number.",
+     "title_bn": "ফোনে কথা বলতে বলতে টাকা পাঠানো",
+     "story_bn": "একজন 'অফিসার' ফোনে থেকে গ্রাহককে তাড়া দিচ্ছে, আর গ্রাহক কথা চলা অবস্থায় নতুন একটি নম্বরে সাধারণের দ্বিগুণ টাকা পাঠাচ্ছেন। অ্যাপ জানে কল চলছে।"},
+    {"key": "agent_cashout", "title": "Mule cash-out at an agent", "expected": "WARN/HOLD",
+     "description": "Three strangers sent money in the last 40 minutes; the wallet now cashes it all out at an agent that is serving many first-time customers.",
+     "title_bn": "এজেন্টে মিউল ক্যাশ আউট",
+     "story_bn": "গত ৪০ মিনিটে তিনজন অপরিচিত মানুষ এই ওয়ালেটে টাকা পাঠিয়েছে, আর এখন পুরো টাকা একটি এজেন্টে ক্যাশ আউট হচ্ছে। একই এজেন্টে এই এক ঘণ্টায় আরও কয়েকটি নতুন ওয়ালেট একইভাবে টাকা তুলেছে।"},
 ]
 
 
@@ -160,6 +168,44 @@ def run_scenario(body: RunScenario, state: AppState = Depends(state_dep),
         setup.append(f"Cash-out of 24,700 BDT at {agent} 50 minutes ago")
         setup_bn.append(f"৫০ মিনিট আগে {agent} এজেন্টে ২৪,৭০০ টাকা ক্যাশ আউট")
         tx = {**base, "type": "cash_out", "receiver": agent, "amount": 24_850.0}
+    elif body.scenario == "on_call_scam":
+        known = state.engine.wallets.get(cid)
+        known_out = known.known_out if known else {}
+        stranger = next(w for w in state.customers.index[::-1] if w != cid and w not in known_out)
+        setup.append("The app reports an active phone call")
+        setup_bn.append("অ্যাপ জানাচ্ছে: এই মুহূর্তে ফোনে কল চলছে")
+        tx = {**base, "type": "send_money", "receiver": stranger, "amount": float(max(1000, round(typical * 2 / 100) * 100)),
+              "on_call": True}
+    elif body.scenario == "agent_cashout":
+        collectors, forwarders = _ring_wallets(state, cid)
+        agent = _top_contact(state, cid, "A") or "A001"
+        # Fresh wallets every run (repeating the demo must show the same pattern): senders that never
+        # paid this customer, and cash-out wallets that never used this agent.
+        me, ag = state.engine.wallets.get(cid), state.engine.wallets.get(agent)
+        paid_me = me.known_in if me else set()
+        used_agent = ag.known_in if ag else set()
+        mules = list(state.customers.index[state.customers.synthetic_role == "mule"])
+        pool = [w for w in dict.fromkeys(forwarders + collectors + mules) if w != cid]
+        senders = [w for w in pool if w not in paid_me][:3] or (forwarders + collectors)[:3]
+        others_pool = [w for w in pool if w not in used_agent and w not in senders]
+        inflow = 0.0
+        for i, snd in enumerate(senders):
+            amt = 2500.0 + 500 * i
+            ingest_committed(state, {"tx_id": None, "ts": now - (40 - 12 * i) * 60, "type": "send_money", "amount": amt,
+                                     "sender": snd, "receiver": cid, "device_id": None, "geo_cell": None})
+            inflow += amt
+        others = others_pool[:4]
+        for i, w in enumerate(others):
+            ingest_committed(state, {"tx_id": None, "ts": now - (50 - 10 * i) * 60, "type": "cash_out", "amount": 4000.0,
+                                     "sender": w, "receiver": agent, "device_id": None, "geo_cell": None})
+        setup.append(f"3 strangers sent {inflow:,.0f} BDT in the last 40 minutes")
+        setup.append(f"{len(others)} other new wallets cashed out at {agent} in the last hour")
+        setup_bn.append(f"গত ৪০ মিনিটে ৩ জন অপরিচিত মানুষ মোট {inflow:,.0f} টাকা পাঠিয়েছে")
+        setup_bn.append(f"গত এক ঘণ্টায় {agent} এজেন্টে আরও {len(others)}টি নতুন ওয়ালেট ক্যাশ আউট করেছে")
+        # Drain everything that arrived in the last 24 h (earlier demo runs included), up to the limit.
+        st = state.engine.wallets.get(cid)
+        inflow_24h = sum(x[1] for x in st.inn if now - x[0] <= DAY) if st else inflow
+        tx = {**base, "type": "cash_out", "receiver": agent, "amount": float(min(24_900, round(max(inflow, inflow_24h) * 0.97 / 10) * 10))}
     else:
         raise HTTPException(404, "unknown scenario")
     return {"scenario": body.scenario, "setup": setup, "setup_bn": setup_bn, "transaction": tx}

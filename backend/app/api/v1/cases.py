@@ -27,6 +27,7 @@ def _summary(a: Alert) -> dict:
         "sender": a.sender, "receiver": a.receiver, "amount": a.amount, "decision": a.decision,
         "risk_score": a.risk_score, "reason_codes": a.reason_codes, "status": a.status, "label": a.label,
         "customer_action": a.customer_action, "source": a.source,
+        "appealed_at": a.appealed_at, "appeal_note": a.appeal_note,
     }
 
 
@@ -34,6 +35,7 @@ def _summary(a: Alert) -> dict:
 def list_alerts(
     status: str | None = Query(default=None),
     decision: str | None = Query(default=None),
+    appealed: bool = Query(default=False, description="Only cases the customer appealed"),
     q: str | None = Query(default=None, max_length=32),
     sort: Literal["risk", "newest"] = "risk",
     page: int = Query(default=1, ge=1),
@@ -46,11 +48,15 @@ def list_alerts(
             stmt = stmt.where(Alert.status.in_(status.split(",")))
         if decision:
             stmt = stmt.where(Alert.decision.in_(decision.split(",")))
+        if appealed:
+            stmt = stmt.where(Alert.appealed_at.is_not(None))
         if q:
             like = f"%{q}%"
             stmt = stmt.where(or_(Alert.sender.like(like), Alert.receiver.like(like), Alert.tx_id.like(like)))
         total = db.scalar(select(func.count()).select_from(stmt.subquery()))
-        order = (Alert.risk_score.desc(), Alert.id.desc()) if sort == "risk" else (Alert.created_at.desc(), Alert.id.desc())
+        # Open customer appeals come first (SLA), then the chosen order.
+        appeal_first = (Alert.appealed_at.is_(None)) | (Alert.label.is_not(None))
+        order = (appeal_first, Alert.risk_score.desc(), Alert.id.desc()) if sort == "risk" else (appeal_first, Alert.created_at.desc(), Alert.id.desc())
         rows = db.scalars(stmt.order_by(*order).offset((page - 1) * size).limit(size)).all()
         return {"total": total, "page": page, "size": size, "items": [_summary(a) for a in rows]}
 

@@ -114,6 +114,79 @@ def test_receiver_fanin_counts_new_senders():
     assert f["r_new_senders_24h"] == 6 and f["r_distinct_senders_24h"] == 6
 
 
+# --------------------------------------------- shared online state (Redis)
+def _scenario(eng: FeatureEngine, t0: float) -> None:
+    eng.register_wallet("C1", t0 - 400 * DAY, "D1")
+    eng.ingest_event({"wallet": "C1", "event": "password_reset", "ts": t0 - HOUR})
+    for i in range(8):
+        eng.update(_tx(t0 + i * HOUR, amount=400 + i))
+    for i in range(4):
+        eng.update(_tx(t0 + 9 * HOUR + i * 60, sender=f"C{i + 20}", receiver="C9"))
+
+
+def test_redis_store_gives_identical_features_and_is_shared_by_workers():
+    import fakeredis
+
+    from app.features.store import RedisWalletStore
+
+    server = fakeredis.FakeServer()
+    worker_a, worker_b, local = FeatureEngine(), FeatureEngine(), FeatureEngine()
+    worker_a.wallets = RedisWalletStore(fakeredis.FakeRedis(server=server))
+    worker_b.wallets = RedisWalletStore(fakeredis.FakeRedis(server=server))
+    t0 = 4_000_000.0
+    _scenario(local, t0)
+    _scenario(worker_a, t0)  # history written by one worker ...
+    probe = _tx(t0 + 10 * HOUR, receiver="C9", amount=3000, device="DNEW")
+    assert worker_b.compute(probe) == local.compute(probe)  # ... is seen exactly the same by another
+    worker_b.update(probe)
+    assert worker_a.compute(_tx(t0 + 11 * HOUR, receiver="C9"))["is_new_recipient"] == 0
+
+
+def test_seed_copies_warm_state_once_and_keeps_live_updates():
+    import fakeredis
+
+    from app.features.store import RedisWalletStore, seed
+
+    client = fakeredis.FakeRedis()
+    warm = FeatureEngine()
+    _scenario(warm, 5_000_000.0)
+    assert seed(client, warm.wallets, "v1:1") is True
+    shared = FeatureEngine()
+    shared.wallets = RedisWalletStore(client)
+    shared.update(_tx(5_000_000.0 + 20 * HOUR, receiver="C77"))
+    assert seed(client, warm.wallets, "v1:1") is False  # restart: live history kept
+    assert "C77" in shared.wallets["C1"].known_out
+    assert seed(client, warm.wallets, "v2:1") is True  # new dataset: reseeded
+    assert "C77" not in shared.wallets["C1"].known_out
+
+
+def test_graph_edges_are_shared_between_workers():
+    import fakeredis
+
+    from app.features.store import SharedEdges
+    from app.graph.store import GraphStore
+
+    server = fakeredis.FakeServer()
+    a, b = GraphStore(), GraphStore()
+    a.shared = SharedEdges(fakeredis.FakeRedis(server=server))
+    b.shared = SharedEdges(fakeredis.FakeRedis(server=server))
+    a.add_edge({"ts": 1.0, "sender": "C1", "receiver": "C2", "amount": 100.0, "type": "send_money"})
+    sub = b.subgraph("C2")
+    assert {"C1", "C2"} <= {n["id"] for n in sub["nodes"]}
+    assert len(a.edges) == len(b.edges) == 1
+
+
+def test_rate_limit_is_shared_through_redis():
+    import fakeredis
+
+    from app.core.ratelimit import RateLimitMiddleware
+
+    client = fakeredis.FakeRedis()
+    w1, w2 = RateLimitMiddleware(None, per_minute=3), RateLimitMiddleware(None, per_minute=3)
+    results = [w._allow_redis(client, "1.2.3.4") for w in (w1, w2, w1, w2)]
+    assert results == [True, True, True, False]
+
+
 # ---------------------------------------------------------------- explanations
 def test_reason_codes_are_only_emitted_when_true():
     feats = {"is_new_recipient": 0, "amount_ratio": 1.0, "recent_device": 0}
@@ -179,3 +252,102 @@ def test_compiled_isolation_forest_matches_sklearn():
     expected = -model.score_samples(probe)
     got = np.array([fast.score_one(row) for row in probe])
     assert np.allclose(got, expected, atol=1e-9)
+
+
+# ----------------------------------------------------------------- migrations
+def _schema_diff(conn):
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+
+    from app.db.database import Base
+
+    return compare_metadata(MigrationContext.configure(conn), Base.metadata)
+
+
+def test_migrations_build_the_same_schema_as_the_models(tmp_path):
+    from sqlalchemy import create_engine
+
+    from app.db.database import migrate
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'm.db').as_posix()}")
+    with engine.begin() as conn:
+        migrate(conn)
+        assert _schema_diff(conn) == []  # a model change without a migration fails here
+    engine.dispose()
+
+
+def test_migrations_adopt_a_database_created_before_alembic(tmp_path):
+    from sqlalchemy import create_engine, text
+
+    from app.db.database import Base, migrate
+
+    from alembic import command
+    from alembic.config import Config
+
+    from app.core.config import BACKEND_DIR
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'legacy.db').as_posix()}")
+    with engine.begin() as conn:
+        # A database from before Alembic: the original schema (revision 0001), no version table.
+        cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+        cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+        cfg.attributes["connection"] = conn
+        command.upgrade(cfg, "0001")
+        conn.execute(text("DROP TABLE alembic_version"))
+        conn.execute(text("INSERT INTO feedback (alert_id, analyst, label, notes, created_at) VALUES (1, 'a', 'fraud', '', 0)"))
+        migrate(conn)
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002"
+        assert conn.execute(text("SELECT count(*) FROM study_responses")).scalar() == 0  # later migrations applied
+        assert conn.execute(text("SELECT count(*) FROM feedback")).scalar() == 1  # data kept
+    engine.dispose()
+
+
+# ------------------------------------------------------------ new detectors / policy modes
+def test_agent_cashout_detector_flags_fresh_drain_with_agent_velocity():
+    from app.detectors.agent_cashout import agent_cashout_risk
+
+    f = {"type_code": 1, "s_mins_since_inflow": 15, "s_inflow_ratio_24h": 0.97, "s_new_sender_inflow_1h": 1,
+         "s_tenure_days": 400, "a_new_customers_1h": 4, "a_cashout_rate_ratio": 6}
+    score, parts = agent_cashout_risk(f)
+    assert score >= 0.8 and parts["agent_velocity"] == 1.0
+    assert agent_cashout_risk({**f, "type_code": 0})[0] == 0.0
+    assert agent_cashout_risk({**f, "s_merchant_profile": 1})[0] < score  # shops cash out takings daily
+
+
+def test_graph_risk_is_merchant_aware():
+    from app.detectors.graph import graph_risk
+
+    f = {"type_code": 0, "r_g_comm_fanin": 4.0, "r_new_senders_24h": 10, "r_tenure_days": 20}
+    assert graph_risk({**f, "r_merchant_profile": 1})[0] < graph_risk(f)[0]
+
+
+@pytest.mark.parametrize("mode,hold,warn", [("enforce", "HOLD", "WARN"), ("warn", "WARN", "WARN"), ("shadow", "ALLOW", "ALLOW")])
+def test_policy_rollout_modes(tmp_path, mode, hold, warn):
+    p = tmp_path / "policy.yaml"
+    p.write_text(POLICY + f"\nmode: {mode}\n", encoding="utf-8")
+    eng = PolicyEngine(p)
+    assert eng.apply_mode("HOLD") == hold and eng.apply_mode("WARN") == warn and eng.apply_mode("ALLOW") == "ALLOW"
+
+
+def test_policy_rejects_unknown_mode(tmp_path):
+    p = tmp_path / "policy.yaml"
+    p.write_text(POLICY + "\nmode: yolo\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        PolicyEngine(p)
+
+
+def test_psi_is_zero_for_same_distribution_and_large_for_shift():
+    import numpy as np
+
+    from app.services.drift import psi
+
+    e = np.array([0.25, 0.25, 0.25, 0.25])
+    assert psi(e, e) < 1e-9
+    assert psi(e, np.array([0.7, 0.1, 0.1, 0.1])) > 0.25
+
+
+def test_wilson_interval():
+    from app.api.v1.study import wilson
+
+    lo, hi = wilson(45, 60)
+    assert lo < 0.75 < hi and wilson(0, 0) is None

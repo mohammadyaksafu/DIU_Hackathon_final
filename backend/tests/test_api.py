@@ -25,7 +25,7 @@ def test_health(client):
     assert r.status_code == 200
     body = r.json()
     assert body["checks"]["database"] == "ok"
-    assert set(body["checks"]["detectors"]) == {"rules", "anomaly", "lgbm", "graph"}
+    assert set(body["checks"]["detectors"]) == {"rules", "anomaly", "lgbm", "graph", "agent_cashout"}
 
 
 def test_auth_and_roles(client, customer_h, analyst_h):
@@ -73,6 +73,8 @@ def test_golden_normal_is_allowed(client, customer_h, scenario):
     ("refund_scam", "garments_worker"),
     ("account_takeover", "student"),
     ("structuring", "shopkeeper"),
+    ("on_call_scam", "garments_worker"),
+    ("agent_cashout", "student"),
 ])
 def test_golden_fraud_is_intercepted(client, customer_h, scenario, persona):
     c = _customer(client, customer_h, persona)
@@ -109,6 +111,15 @@ def test_cancel_counts_as_scam_averted(client, customer_h, analyst_h):
     assert r.json()["status"] == "CANCELLED"
     after = client.get("/api/v1/metrics/impact", headers=analyst_h).json()["live"]["scams_averted"]
     assert after == before + 1
+
+
+def test_impact_estimates_are_a_range_around_the_trained_estimate(client, analyst_h):
+    body = client.get("/api/v1/metrics/impact", headers=analyst_h).json()
+    loss = body["estimates"]["loss_prevented_bdt"]
+    assert loss["low"] <= loss["central"] <= loss["high"]
+    assert abs(loss["central"] - body["offline"]["business"]["estimated_prevented_bdt"]) <= 1
+    work = body["estimates"]["analyst_workload"]
+    assert work["analyst_hours_per_day"]["with_copilot"] < work["analyst_hours_per_day"]["manual"]
 
 
 def test_idempotency(client, customer_h):
@@ -339,3 +350,43 @@ def test_model_quality_gate(trained):
     for scen, m in metrics["per_scenario"].items():
         if m["n"] >= 10 and scen != "S3_refund_bait":
             assert m["recall_flagged"] >= 0.5, (scen, m)
+
+
+def test_customer_appeal_jumps_the_queue_and_release_works(client, customer_h, analyst_h):
+    c = _customer(client, customer_h, "student")
+    res = _run(client, customer_h, c["id"], "account_takeover")
+    assert res["decision"] == "HOLD"
+    r = client.post(f"/api/v1/transactions/{res['transaction_id']}/appeal", headers=customer_h, json={"note": "it was me"})
+    assert r.status_code == 200 and r.json()["status"] == "appealed" and r.json()["sla_minutes"] == 15
+    queue = client.get("/api/v1/alerts?status=OPEN,INVESTIGATING", headers=analyst_h).json()["items"]
+    assert queue[0]["id"] == res["alert_id"] and queue[0]["appealed_at"]
+    fb = client.post(f"/api/v1/cases/{res['alert_id']}/feedback", headers=analyst_h, json={"label": "legit"}).json()
+    assert fb["released"] is True
+    again = client.post(f"/api/v1/transactions/{res['transaction_id']}/appeal", headers=customer_h, json={}).json()
+    assert again["status"] == "already_reviewed"
+
+
+def test_cancel_after_release_cannot_double_complete(client, customer_h, analyst_h):
+    c = _customer(client, customer_h, "student")
+    res = _run(client, customer_h, c["id"], "account_takeover")
+    client.post(f"/api/v1/cases/{res['alert_id']}/feedback", headers=analyst_h, json={"label": "legit"})
+    r = client.post(f"/api/v1/transactions/{res['transaction_id']}/confirm", headers=customer_h, json={"action": "cancelled"}).json()
+    assert r.get("unchanged") is True and r["status"] == "SENT"
+
+
+def test_user_study_records_and_reports_with_confidence_intervals(client, customer_h, analyst_h):
+    who = client.post("/api/v1/study/participants", headers=customer_h).json()
+    assert who["arm"] in ("A", "B", "C")
+    for scen, action in (("prize_fee", "cancelled"), ("family_rent", "sent")):
+        r = client.post("/api/v1/study/responses", headers=customer_h,
+                        json={"participant": who["participant"], "arm": who["arm"], "scenario": scen, "action": action, "seconds": 4.2, "trust": 4})
+        assert r.status_code == 200
+    arm = client.get("/api/v1/study/results", headers=analyst_h).json()["arms"][who["arm"]]
+    assert arm["scam_cancel_rate"] == 1.0 and arm["scam_cancel_ci95"][0] < 1.0
+
+
+def test_drift_and_impact_evidence_endpoints(client, analyst_h):
+    d = client.get("/api/v1/metrics/drift", headers=analyst_h).json()
+    assert d["status"] in ("insufficient_data", "stable", "watch", "drift")
+    body = client.get("/api/v1/metrics/impact", headers=analyst_h).json()
+    assert "roi" in body["estimates"] and body["evidence"]["measured"]
