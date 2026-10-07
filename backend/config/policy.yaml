@@ -44,7 +44,10 @@ segment_overrides:
       warn_t: "warn_t * 0.8"   # values may be numbers or expressions
   # Registered shops / online sellers: fewer WARNs on routine business payments (known payees or
   # merchant payments). Transfers to NEW people keep full protection, so scams on shop owners are still caught.
+  # shadow: true => evaluated and logged on every decision ("merchant_sender (shadow)") but NOT applied,
+  # until it is validated on independently governed data. Set to false to enforce.
   - name: merchant_sender
+    shadow: true
     when: "s_merchant_profile == 1 and (is_new_recipient == 0 or type_code == 2)"
     set:
       warn_t: "min(hold_t, warn_t * 1.5)"

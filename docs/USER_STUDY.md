@@ -7,7 +7,7 @@
 ## Design
 - **Arms (between subjects, balanced assignment):** A no warning · B generic warning ("verify before sending to a stranger") · C Shurokkha explained Bangla warning (specific reasons).
 - **Tasks:** 6 scripted transfers in Bangla, in the same order: 3 scams (prize fee, wrong-send refund, "account will be blocked") and 3 genuine (rent to mother, shop payment, first purchase from a recommended online seller, which also gets a mild warning in arm C, so friction is measured too).
-- **Measures:** scam-cancel rate (primary), genuine-continue rate (friction), time to decide, trust in the warning (1–5).
+- **Measures:** scam-cancel rate (primary), genuine-continue rate (friction), time to decide, trust in the warning (1–5), and complaint intent ("would you complain to upay about this warning?", yes/no, with a 95% CI per arm).
 - **Sample:** 60+ participants (20 per arm): students, family members, shopkeepers and rickshaw drivers for realism. 20 per arm detects a 30-point difference in cancel rate (e.g. 45% vs 75%) with ~80% power.
 
 ## Ethics

@@ -34,3 +34,15 @@ Bangladesh's MFS sector moved Tk 1.72 trillion in January 2025 (Bangladesh Bank 
 ## Drift monitor reacting to the test traffic
 
 The load test sends random sender/receiver pairs and uniform amounts, which look nothing like real customers. After the runs, `GET /metrics/drift` reported **drift** (PSI 6.3 on community fan-in, 3.9 on amount, 1.5 on hour-of-day familiarity) and recommended retraining with human sign-off: the monitor flags exactly this kind of distribution change.
+
+## Graph rebuild under continuous ingestion
+
+`tests/load/graph_under_load.py`, 4 workers, 8 users for 40 s: every allowed transfer was confirmed, so committed edges kept flowing into the shared graph while the mule-ring snapshot was rebuilt 12 times through the admin API.
+
+| Result | Value |
+|---|---|
+| Transfers committed into the graph during the run | 2,285 |
+| Snapshot rebuild time (min / median / max) | 0.83 s / 1.06 s / 1.28 s |
+| Scoring latency while rebuilding (client p50 / p95 / p99) | 64 / 97 / 187 ms |
+
+Rebuilds stay around one second under ingestion, and scoring keeps serving from the last finished snapshot meanwhile; the one-second rebuild never blocks a decision.

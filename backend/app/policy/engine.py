@@ -104,9 +104,13 @@ class PolicyEngine:
         applied = []
         for ov in self.config.get("segment_overrides") or []:
             if evaluate(str(ov["when"]), {**names, **variables}):
+                name = ov.get("name", ov["when"])
+                if ov.get("shadow"):  # logged for validation, not applied (segment rules are validated before enforcing)
+                    applied.append(f"{name} (shadow)")
+                    continue
                 for key, value in (ov.get("set") or {}).items():
                     variables[key] = evaluate(value, {**names, **variables}) if isinstance(value, str) else value
-                applied.append(ov.get("name", ov["when"]))
+                applied.append(name)
         return variables, applied
 
     def decide(self, names: dict, rule_hits: set[str]) -> Decision:

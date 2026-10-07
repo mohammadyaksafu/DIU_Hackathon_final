@@ -72,6 +72,7 @@ test("user study: consent, six transfers, trust rating, results table", async ({
     await page.getByRole("button", { name: "পাঠাব না" }).click();
   }
   await page.getByRole("radio", { name: "4" }).click();
+  await page.getByRole("radio", { name: "না" }).click();
   await page.getByRole("button", { name: "Submit" }).click();
   await expect(page.getByText(/উত্তর জমা হয়েছে/)).toBeVisible();
   await expect(page.getByText(/participants ·/)).toBeVisible();

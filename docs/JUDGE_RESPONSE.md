@@ -25,7 +25,7 @@ Phase 1 score ≈ 83/100. The judges' common message: *"It works on synthetic da
 ## Business / customer impact (17 / 20)
 | Comment | What we did | Evidence |
 |---|---|---|
-| Cancel rate is assumed | **WARN user study built into the app** (3 randomised arms, consent, anonymous codes, Wilson CIs); results feed the Impact page | `/study`, [USER_STUDY.md](USER_STUDY.md) (**Built, awaiting data**) |
+| Cancel rate is assumed | **WARN user study built into the app** (3 randomised arms, consent, anonymous codes, Wilson CIs, complaint-intent question); results feed the Impact page | `/study`, [USER_STUDY.md](USER_STUDY.md) (**Built, awaiting data**) |
 | Separate simulated from validated | Impact page has a "Measured vs simulated" panel; every report labels its numbers | Impact page, this table |
 | ROI with sensitivity | Net benefit/day, ROI multiple, break-even cancel rate and a tornado over cancel rate, fraud base rate and false-alarm cost | Impact page, `app/api/v1/insights.py` (Simulated) |
 | Analyst workload | Hours/day with and without the copilot (Estimate); trial protocol using the recorded `opened_at` / `decided_at` | Impact page, [USER_STUDY.md](USER_STUDY.md) |
@@ -56,7 +56,7 @@ Phase 1 score ≈ 83/100. The judges' common message: *"It works on synthetic da
 |---|---|---|
 | Load test, p95/p99 | 1 → 2 → 4 workers: 52 → 93 → 169 req/s, 0 errors; server p50/p95/p99 11.6 / 26.0 / 35.8 ms | [load_test.md](reports/load_test.md) (Measured, laptop) |
 | Failover and monitoring | Prometheus + provisioned Grafana dashboard (profile `monitoring`); worker failover measured; fail-safe `on_scoring_error` | `deploy/monitoring`, [ARCHITECTURE.md](ARCHITECTURE.md) |
-| Graph refresh will slow down | Benchmark: rebuild grows ≈linearly with edges in a fixed 14-day window and runs off the request path; online graph counters cost a fraction of a millisecond per transfer | [graph_benchmark.md](reports/graph_benchmark.md) (Measured) |
+| Graph refresh will slow down | Benchmark: rebuild grows ≈linearly with edges in a fixed 14-day window and runs off the request path; under continuous ingestion (2,285 committed transfers in 40 s) rebuilds took 0.83–1.28 s while scoring continued | [graph_benchmark.md](reports/graph_benchmark.md), [load_test.md](reports/load_test.md) (Measured) |
 | Integration contract | OpenAPI, sample payloads, sequence diagram, timeout rule | [INTEGRATION.md](INTEGRATION.md) |
 
 ## Responsible AI & security (3.33 / 5)
@@ -65,7 +65,7 @@ Phase 1 score ≈ 83/100. The judges' common message: *"It works on synthetic da
 | Appeal / release process | "Not a scam? Appeal" button; appealed cases jump the queue with a 15-minute SLA; `legit` releases the HOLD and becomes a label | Customer app, analyst queue, `POST /transactions/{id}/appeal` |
 | Drift monitoring, access control, privacy | PSI drift endpoint; roles + audit; privacy and retention rules | [GOVERNANCE.md](GOVERNANCE.md) |
 | Honest shopkeepers flagged | Merchant-aware features: merchants-as-senders FPR 2.9% → 0.6%, all legitimate 0.68% → 0.20%, **fraud recall unchanged** (96.9%, age 65+ unchanged) | [evaluation.md §8](reports/evaluation.md) |
-| Fairness and calibration by segment | FPR, FNR, warning rate and ECE per segment, with the constraint not to lower recall for high-risk groups | [evaluation.md §8](reports/evaluation.md) |
+| Fairness and calibration by segment | FPR, FNR, warning rate and ECE per segment, with the constraint not to lower recall for high-risk groups. The merchant threshold override now runs in **shadow** (logged, not applied) until validated on governed data | [evaluation.md §8](reports/evaluation.md), `config/policy.yaml` |
 | Adversarial probing, endpoint protection | Threat table | [GOVERNANCE.md](GOVERNANCE.md) |
 
 ## What still needs real-world input

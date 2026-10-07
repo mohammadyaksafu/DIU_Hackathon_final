@@ -114,3 +114,4 @@ class StudyResponse(Base):
     action: Mapped[str] = mapped_column(String(16))  # sent | cancelled
     seconds: Mapped[float] = mapped_column(Float)
     trust: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 self-reported
+    complaint: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1 = would complain to upay about this warning

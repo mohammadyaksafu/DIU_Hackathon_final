@@ -70,6 +70,7 @@ class Response(BaseModel):
     action: Literal["sent", "cancelled"]
     seconds: float = Field(ge=0, le=3600)
     trust: int | None = Field(default=None, ge=1, le=5)
+    complaint: bool | None = Field(default=None, description="Would complain to upay about being warned")
 
 
 @router.post("/responses")
@@ -79,7 +80,8 @@ def record(body: Response, p: Principal = Depends(require_roles("customer"))) ->
         raise HTTPException(422, "unknown scenario")
     with session_scope() as db:
         db.add(StudyResponse(participant=body.participant, arm=body.arm, scenario=body.scenario,
-                             is_scam=int(scen["is_scam"]), action=body.action, seconds=body.seconds, trust=body.trust))
+                             is_scam=int(scen["is_scam"]), action=body.action, seconds=body.seconds, trust=body.trust,
+                             complaint=None if body.complaint is None else int(body.complaint)))
     return {"recorded": True}
 
 
@@ -98,7 +100,7 @@ def results(p: Principal = Depends(require_roles("analyst"))) -> dict:
     """Measured outcomes per arm with 95% Wilson confidence intervals."""
     with session_scope() as db:
         rows = db.scalars(select(StudyResponse)).all()
-        data = [(r.participant, r.arm, r.is_scam, r.action, r.seconds, r.trust) for r in rows]
+        data = [(r.participant, r.arm, r.is_scam, r.action, r.seconds, r.trust, r.complaint) for r in rows]
     arms = {}
     for arm in ARMS:
         a = [d for d in data if d[1] == arm]
@@ -107,6 +109,8 @@ def results(p: Principal = Depends(require_roles("analyst"))) -> dict:
         k_cancel = sum(1 for d in scams if d[3] == "cancelled")
         k_continue = sum(1 for d in legit if d[3] == "sent")
         trust = [d[5] for d in a if d[5] is not None]
+        people = {d[0]: d[6] for d in a if d[6] is not None}  # one complaint answer per participant
+        k_compl = sum(people.values())
         arms[arm] = {
             "participants": len({d[0] for d in a}),
             "scam_decisions": len(scams),
@@ -117,6 +121,8 @@ def results(p: Principal = Depends(require_roles("analyst"))) -> dict:
             "legit_continue_ci95": wilson(k_continue, len(legit)),
             "median_seconds": round(statistics.median([d[4] for d in a]), 1) if a else None,
             "mean_trust": round(statistics.mean(trust), 2) if trust else None,
+            "complaint_rate": round(k_compl / len(people), 4) if people else None,
+            "complaint_ci95": wilson(k_compl, len(people)),
         }
     total = len({d[0] for d in data})
     return {"participants": total, "arms": arms,

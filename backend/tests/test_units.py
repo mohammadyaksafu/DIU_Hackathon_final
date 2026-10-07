@@ -296,7 +296,7 @@ def test_migrations_adopt_a_database_created_before_alembic(tmp_path):
         conn.execute(text("DROP TABLE alembic_version"))
         conn.execute(text("INSERT INTO feedback (alert_id, analyst, label, notes, created_at) VALUES (1, 'a', 'fraud', '', 0)"))
         migrate(conn)
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0003"
         assert conn.execute(text("SELECT count(*) FROM study_responses")).scalar() == 0  # later migrations applied
         assert conn.execute(text("SELECT count(*) FROM feedback")).scalar() == 1  # data kept
     engine.dispose()

@@ -25,7 +25,7 @@ Append-only `audit_log`: every decision (shown decision, policy decision, mode, 
 - Align with Bangladesh Bank MFS regulations and the national data-protection framework. **Verify the current legal status of the data-protection ordinance before relying on it**; this document does not assert it.
 
 ## Fairness
-Segment report each retrain: FPR, FNR, warning rate and calibration per division, age band, KYC level, persona and tenure (`reports/evaluation.md §8`). Constraint: equalise false-positive burden **without lowering recall for high-risk groups**. Merchant-aware features reduce false alarms for registered shops and sellers; transfers by anyone to a *new* person keep full protection.
+Segment report each retrain: FPR, FNR, warning rate and calibration per division, age band, KYC level, persona and tenure (`reports/evaluation.md §8`). Constraint: equalise false-positive burden **without lowering recall for high-risk groups**. Merchant-aware features reduce false alarms for registered shops and sellers; transfers by anyone to a *new* person keep full protection. **Segment-specific thresholds ship in shadow:** the `merchant_sender` override is evaluated and logged on every decision (`merchant_sender (shadow)` in the decision trace) but not applied until it is validated on independently governed data.
 
 ## Drift and retraining
 `GET /metrics/drift`: PSI of key live features against the training window (shared across workers via Redis). PSI > 0.25 recommends retraining; the retrained model goes through the evaluation pack and a human sign-off before activation.

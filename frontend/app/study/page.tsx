@@ -28,6 +28,8 @@ interface ArmResult {
   legit_continue_ci95: [number, number] | null;
   median_seconds: number | null;
   mean_trust: number | null;
+  complaint_rate?: number | null;
+  complaint_ci95?: [number, number] | null;
 }
 interface Results {
   participants: number;
@@ -53,6 +55,7 @@ export default function StudyPage() {
   const [shownAt, setShownAt] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [trust, setTrust] = useState<number | null>(null);
+  const [complaint, setComplaint] = useState<boolean | null>(null);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +74,7 @@ export default function StudyPage() {
       setAnswers([]);
       setDone(false);
       setTrust(null);
+      setComplaint(null);
       setShownAt(performance.now());
     } catch (e) {
       setError((e as Error).message);
@@ -90,7 +94,7 @@ export default function StudyPage() {
     setError(null);
     try {
       for (const a of answers) {
-        await api("/study/responses", { role: "customer", body: { participant: who.participant, arm: who.arm, ...a, trust } });
+        await api("/study/responses", { role: "customer", body: { participant: who.participant, arm: who.arm, ...a, trust, complaint } });
       }
       setDone(true);
       results.reload();
@@ -159,7 +163,14 @@ export default function StudyPage() {
                     className={`h-10 w-10 rounded-lg border ${trust === n ? "border-brand bg-brand text-brand-ink" : "border-line bg-surface text-ink"}`}>{n}</button>
                 ))}
               </div>
-              <Button onClick={finish} disabled={trust == null} className="w-full">Submit</Button>
+              <p lang="bn" className="text-ink">এই অ্যাপ সতর্কবার্তা দেখালে আপনি কি upay-এর কাছে অভিযোগ করতেন?</p>
+              <div className="flex gap-2" role="radiogroup" aria-label="Complaint intent">
+                {[{ v: true, l: "হ্যাঁ" }, { v: false, l: "না" }].map((o) => (
+                  <button key={o.l} type="button" role="radio" aria-checked={complaint === o.v} onClick={() => setComplaint(o.v)}
+                    className={`h-10 rounded-lg border px-4 ${complaint === o.v ? "border-brand bg-brand text-brand-ink" : "border-line bg-surface text-ink"}`}>{o.l}</button>
+                ))}
+              </div>
+              <Button onClick={finish} disabled={trust == null || complaint == null} className="w-full">Submit</Button>
             </div>
           )}
           {error && <div className="mt-3"><ErrorBox error={error} /></div>}
@@ -179,7 +190,8 @@ export default function StudyPage() {
                       <th className="py-2 pr-3 font-medium">Scams cancelled</th>
                       <th className="py-2 pr-3 font-medium">Genuine payments completed</th>
                       <th className="py-2 pr-3 font-medium">Median time</th>
-                      <th className="py-2 font-medium">Trust (1–5)</th>
+                      <th className="py-2 pr-3 font-medium">Trust (1–5)</th>
+                      <th className="py-2 font-medium">Would complain</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -190,7 +202,8 @@ export default function StudyPage() {
                         <td className="tabular py-2 pr-3">{fmtPct(r.scam_cancel_rate, 0)}{ci(r.scam_cancel_ci95)}</td>
                         <td className="tabular py-2 pr-3">{fmtPct(r.legit_continue_rate, 0)}{ci(r.legit_continue_ci95)}</td>
                         <td className="tabular py-2 pr-3">{r.median_seconds != null ? `${r.median_seconds}s` : "–"}</td>
-                        <td className="tabular py-2">{r.mean_trust ?? "–"}</td>
+                        <td className="tabular py-2 pr-3">{r.mean_trust ?? "–"}</td>
+                        <td className="tabular py-2">{fmtPct(r.complaint_rate ?? null, 0)}{ci(r.complaint_ci95 ?? null)}</td>
                       </tr>
                     ))}
                   </tbody>
