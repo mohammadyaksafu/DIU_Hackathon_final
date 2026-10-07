@@ -29,6 +29,7 @@ from sklearn.preprocessing import StandardScaler
 
 from app.detectors.anomaly import anomaly_matrix, to_percentile
 from app.detectors.base import DetectorDeps, Signal
+from app.detectors.agent_cashout import agent_cashout_risk
 from app.detectors.graph import graph_risk
 from app.detectors.rules import RulesDetector
 from app.explain.reason_codes import select_reasons
@@ -156,7 +157,8 @@ def train(data_dir: Path, registry_dir: Path, config_dir: Path, reports_dir: Pat
     for i, row in enumerate(test_rows):
         g, _ = graph_risk(row)
         graph_scores.append(g)
-        names = {**row, "lgbm": float(p_te[i]), "anomaly": float(anom_te[i]), "graph": g, "rules": float(rule_score[i])}
+        names = {**row, "lgbm": float(p_te[i]), "anomaly": float(anom_te[i]), "graph": g, "rules": float(rule_score[i]),
+                 "agent_cashout": agent_cashout_risk(row)[0]}
         d = policy.decide(names, {h["name"] for h in rule_hits[i]})
         actions.append(d.action)
     actions = np.array(actions)

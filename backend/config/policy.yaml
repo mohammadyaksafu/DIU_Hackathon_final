@@ -2,11 +2,22 @@
 #
 # Expressions are evaluated by a restricted, sandboxed evaluator (app/policy/expr.py).
 # Available names:
-#   detector scores : lgbm, anomaly, graph, rules   (0..1; missing detector => 0)
+#   detector scores : lgbm, anomaly, graph, rules, agent_cashout   (0..1; missing detector => 0)
 #   variables       : everything under `variables` (after segment overrides)
 #   features        : any feature from the feature registry (e.g. s_tenure_days, amount)
 #   functions       : rule_hit('RULE_NAME'), min, max, abs
-version: 3
+version: 4
+
+# Rollout mode (the safe path to real traffic):
+#   shadow  : decide and log every alert, but always show the customer ALLOW (no customer impact)
+#   warn    : WARN-only pilot; a HOLD decision is shown as a WARN
+#   enforce : full ALLOW / WARN / HOLD
+mode: enforce
+
+# If scoring itself fails (feature store or model unreachable): ALLOW = fail-open,
+# WARN = fail-safe without blocking. Single detector failures never reach this: the
+# policy just treats that detector as 0 and the other detectors still decide.
+on_scoring_error: WARN
 
 variables:
   # "model" means: use the threshold learned on the validation set and stored in the
@@ -19,9 +30,9 @@ variables:
 # Evaluated in order; the first matching tier wins.
 tiers:
   - action: HOLD
-    when: "lgbm >= hold_t or rules >= 0.9"
+    when: "lgbm >= hold_t or rules >= 0.9 or (agent_cashout >= 0.8 and graph >= 0.5)"
   - action: WARN
-    when: "lgbm >= warn_t or rules >= 0.6 or (anomaly >= anomaly_warn_pct and lgbm >= warn_t * 0.5) or (graph >= graph_warn and is_new_recipient == 1 and lgbm >= warn_t * 0.3)"
+    when: "lgbm >= warn_t or rules >= 0.6 or agent_cashout >= 0.6 or (anomaly >= anomaly_warn_pct and lgbm >= warn_t * 0.5) or (graph >= graph_warn and is_new_recipient == 1 and lgbm >= warn_t * 0.3)"
   - action: ALLOW
     when: "true"
 
@@ -31,6 +42,12 @@ segment_overrides:
     when: "s_tenure_days < 30"
     set:
       warn_t: "warn_t * 0.8"   # values may be numbers or expressions
+  # Registered shops / online sellers: fewer WARNs on routine business payments (known payees or
+  # merchant payments). Transfers to NEW people keep full protection, so scams on shop owners are still caught.
+  - name: merchant_sender
+    when: "s_merchant_profile == 1 and (is_new_recipient == 0 or type_code == 2)"
+    set:
+      warn_t: "min(hold_t, warn_t * 1.5)"
 
 limits:
   max_daily_alerts: 200

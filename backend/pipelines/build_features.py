@@ -15,7 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from app.features.engine import DAY, FeatureEngine
-from app.features.registry import build_features
+from app.features.registry import MERCHANT_PERSONAS, build_features, set_merchant_profiles
 from app.graph.store import GraphStore
 
 META_COLS = ["tx_id", "ts", "day", "type", "amount", "sender", "receiver", "label", "scenario"]
@@ -40,6 +40,7 @@ def build(raw_dir: Path, out_dir: Path, snapshot_every_days: int = 2, verbose: b
     ev = pd.read_parquet(raw_dir / "events.parquet")
     cust = pd.read_parquet(raw_dir / "customers.parquet")
 
+    set_merchant_profiles(cust[cust.persona.isin(MERCHANT_PERSONAS)].id)
     engine = FeatureEngine()
     for c in cust.itertuples(index=False):
         engine.register_wallet(c.id, c.signup_ts, c.home_device)

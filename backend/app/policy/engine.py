@@ -18,6 +18,7 @@ from app.policy.expr import compile_expr, evaluate
 logger = logging.getLogger(__name__)
 
 ACTIONS = ("ALLOW", "WARN", "HOLD")
+MODES = ("shadow", "warn", "enforce")
 _DEFAULT_THRESHOLDS = {"warn_t": 0.5, "hold_t": 0.9}
 
 
@@ -42,6 +43,22 @@ class PolicyEngine:
     def version(self) -> int:
         return int(self.config.get("version", 0))
 
+    @property
+    def mode(self) -> str:
+        return str(self.config.get("mode", "enforce"))
+
+    @property
+    def on_scoring_error(self) -> str:
+        return str(self.config.get("on_scoring_error", "WARN"))
+
+    def apply_mode(self, action: str) -> str:
+        """What the customer sees, given the rollout mode. Alerts always record the policy decision."""
+        if self.mode == "shadow":
+            return "ALLOW"
+        if self.mode == "warn" and action == "HOLD":
+            return "WARN"
+        return action
+
     def load(self) -> dict:
         with open(self.path, encoding="utf-8") as fh:
             cfg = yaml.safe_load(fh) or {}
@@ -54,6 +71,10 @@ class PolicyEngine:
             compile_expr(str(ov["when"]))
         if not cfg.get("tiers"):
             raise ValueError("policy has no tiers")
+        if cfg.get("mode", "enforce") not in MODES:
+            raise ValueError(f"mode must be one of {MODES}")
+        if cfg.get("on_scoring_error", "WARN") not in ("ALLOW", "WARN"):
+            raise ValueError("on_scoring_error must be ALLOW or WARN")
         with self._lock:
             self.config = cfg
             self._mtime = os.path.getmtime(self.path)

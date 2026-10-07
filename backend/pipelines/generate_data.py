@@ -68,7 +68,12 @@ DAY_HOUR_W /= DAY_HOUR_W.sum()
 
 
 class Generator:
-    def __init__(self, n_customers: int, n_days: int, seed: int) -> None:
+    def __init__(self, n_customers: int, n_days: int, seed: int, hard: bool = False) -> None:
+        # hard=True: overlapping behaviour, so no single clue separates fraud from legitimate use.
+        # Legitimate users change phones, replace SIMs, transact at night and send large one-off
+        # amounts more often; fraudsters copy normal amounts, reuse the victim's own phone and
+        # mules wait hours before forwarding. Used by pipelines/evaluation.py (stress test).
+        self.hard = hard
         self.n_customers = n_customers
         self.n_days = n_days
         self.rng = np.random.default_rng(seed)
@@ -145,9 +150,9 @@ class Generator:
             same = by_div[c["division"]]
             k = int(rng.integers(2, 6))
             pool = same if rng.random() < 0.7 else self.customers
-            c["contacts"] = list({self.pick(pool)["id"] for _ in range(k)} - {c["id"]})
+            c["contacts"] = sorted({self.pick(pool)["id"] for _ in range(k)} - {c["id"]})
             local_shops = [s for s in shops[c["division"]] if s["id"] != c["id"]]
-            c["shops"] = list({self.pick(local_shops)["id"] for _ in range(2)}) if local_shops else []
+            c["shops"] = sorted({self.pick(local_shops)["id"] for _ in range(2)}) if local_shops else []
             c["merchants"] = [self.pick(m_by_div[c["division"]])["id"] for _ in range(int(rng.integers(3, 9)))]
             c["agents"] = [self.pick(a_by_div[c["division"]])["id"] for _ in range(int(rng.integers(1, 3)))]
             c["employer"] = self.pick(self.enterprises[:30])["id"]
@@ -196,9 +201,9 @@ class Generator:
         # Legitimate noise: phone changes (+ some legit SIM replacements) and password resets.
         device_change_day = {}
         for c in normal:
-            if rng.random() < 0.015:
+            if rng.random() < (0.06 if self.hard else 0.015):
                 device_change_day[c["id"]] = int(rng.integers(5, self.n_days - 5))
-            if rng.random() < 0.03:
+            if rng.random() < (0.08 if self.hard else 0.03):
                 d = int(rng.integers(1, self.n_days))
                 self.events.append((self.ts(d, self.hour(0.02)), c["id"], "password_reset", 0, "legit_reset"))
 
@@ -208,7 +213,7 @@ class Generator:
                 p = PERSONAS[c["persona"]]
                 if device_change_day.get(c["id"]) == day:
                     c["device"] = f"D{c['id']}-1"
-                    if rng.random() < 0.4:
+                    if rng.random() < (0.6 if self.hard else 0.4):
                         self.events.append((self.ts(day, 9), c["id"], "sim_swap", 0, "legit_sim_replacement"))
                         self.events.append((self.ts(day, 9.5), c["id"], "password_reset", 0, "legit_sim_replacement"))
                     if rng.random() < 0.5:  # e.g. paying for the new phone
@@ -275,7 +280,7 @@ class Generator:
         rng = self.rng
         kinds, probs = zip(*p["mix"].items())
         kind = rng.choice(kinds, p=np.array(probs) / sum(probs))
-        t = self.ts(day, self.hour(p["night"]))
+        t = self.ts(day, self.hour(min(0.5, p["night"] * 2.5) if self.hard else p["night"]))
         dev, geo = c["device"], self.geo(c)
         ch = "ussd" if c["persona"] == "remittance_receiver" and rng.random() < 0.6 else "app"
         s = c["scale"]
@@ -286,7 +291,8 @@ class Generator:
         elif kind == "bill":
             self.add_tx(t, "bill_pay", self.amount(900, 0.5, 100, 6_000), c["id"], "M-BILLER", dev, geo, channel=ch)
         elif kind == "send_contact" and c["contacts"]:
-            self.add_tx(t, "send_money", self.p2p_amount(s * 1.5), c["id"], self.pick(c["contacts"]), dev, geo, channel=ch)
+            big = self.hard and rng.random() < 0.06  # Eid, medical bills, school fees
+            self.add_tx(t, "send_money", self.p2p_amount(s * (6 if big else 1.5)), c["id"], self.pick(c["contacts"]), dev, geo, channel=ch)
         elif kind == "send_shop" and c["shops"]:
             self.add_tx(t, "send_money", self.amount(s * 0.9), c["id"], self.pick(c["shops"]), dev, geo, channel=ch)
         elif kind == "send_new":
@@ -364,6 +370,8 @@ class Generator:
             if rng.random() < 0.35:  # lone scammer using a rented, otherwise quiet wallet
                 coll = self.pick(self.lone_wallets)["id"]
             amt = float(self.pick([500, 1000, 1500, 2000, 2500, 3000, 5000]))
+            if self.hard and rng.random() < 0.6:  # fee sized like the victim's normal transfers
+                amt = self.amount(v["scale"] * 1.3)
             self.add_tx(t, "send_money", amt, v["id"], coll, v["device"], self.geo(v), 1, "S2_prize_scam")
             self.collector_inflows.append((t, coll, amt, ring))
             if rng.random() < 0.3:
@@ -394,6 +402,8 @@ class Generator:
             self.events.append((t - rng.uniform(5, 40) * MINUTE, v["id"], "password_reset", 1, "S1_ato"))
             dev = f"DATO-{i:04d}"
             geo = f"{self.pick(DIVISIONS)[:3].upper()}-{int(rng.integers(1, 21)):02d}"
+            if self.hard and rng.random() < 0.4:  # stolen phone: the victim's own device and area
+                dev, geo = v["device"], v["home_geo"]
             for _ in range(int(rng.integers(2, 5))):
                 amt = float(round(np.clip(v["scale"] * rng.uniform(4, 12), 2000, 24_900) / 100) * 100)
                 coll = self.pick(ring["collectors"])
@@ -406,7 +416,8 @@ class Generator:
             v = self._victim()
             t = self.ts(day, rng.uniform(10, 20))
             for _ in range(int(rng.integers(1, 3))):
-                amt = float(round(np.clip(v["scale"] * rng.uniform(1.5, 6), 1000, 24_500) / 500) * 500)
+                lo_hi = (1.0, 3.0) if self.hard else (1.5, 6)
+                amt = float(round(np.clip(v["scale"] * rng.uniform(*lo_hi), 1000, 24_500) / 500) * 500)
                 coll = self.pick(ring["collectors"])
                 self.add_tx(t, "send_money", amt, v["id"], coll, v["device"], self.geo(v), 1, "S6_social_engineering")
                 self.collector_inflows.append((t, coll, amt, ring))
@@ -418,7 +429,7 @@ class Generator:
             cgeo = self.cust_by_id[coll]["home_geo"]
             if rng.random() < 0.85 and ring["forwarders"]:
                 fwd = self.pick(ring["forwarders"])
-                t1 = t + rng.uniform(5, 50) * MINUTE
+                t1 = t + (rng.uniform(2, 12) * HOUR if self.hard and rng.random() < 0.5 else rng.uniform(5, 50) * MINUTE)
                 a1 = float(round(amt * rng.uniform(0.9, 0.98) / 10) * 10)
                 self.add_tx(t1, "send_money", a1, coll, fwd, cdev, cgeo, 1, "S4_mule_forward")
                 fd = self.cust_by_id[fwd]
@@ -478,6 +489,7 @@ class Generator:
 
         meta = {
             "seed": self.seed,
+            "hard": self.hard,
             "n_customers": self.n_customers,
             "n_days": self.n_days,
             "base_ts": BASE_TS,
@@ -496,8 +508,8 @@ class Generator:
         return meta
 
 
-def generate(out_dir: Path, customers: int = 2000, days: int = 90, seed: int = 42) -> dict:
-    return Generator(customers, days, seed).run(out_dir)
+def generate(out_dir: Path, customers: int = 2000, days: int = 90, seed: int = 42, hard: bool = False) -> dict:
+    return Generator(customers, days, seed, hard).run(out_dir)
 
 
 if __name__ == "__main__":

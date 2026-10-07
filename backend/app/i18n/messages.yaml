@@ -1,6 +1,6 @@
 # Reason-code and decision templates (English + Bangla).
 # Customer-facing text is deterministic and never depends on the LLM.
-# Placeholders: {fanin} {ratio} {hours_sim} {hours_pwd} {tenure} {mins} {limit} {cnt_1h}
+# Placeholders: {fanin} {ratio} {hours_sim} {hours_pwd} {tenure} {mins} {limit} {cnt_1h} {agent_new}
 reasons:
   R_NEW_RECIPIENT:
     en: "You have never sent money to this number before."
@@ -56,6 +56,15 @@ reasons:
   R_NEW_ACCOUNT:
     en: "Your account is new, so unusual transfers are checked more carefully."
     bn: "আপনার অ্যাকাউন্টটি নতুন, তাই অস্বাভাবিক লেনদেন আরও সতর্কভাবে যাচাই করা হয়।"
+  R_ON_CALL:
+    en: "You are on a phone call while sending money to a new number. Scammers often stay on the line to rush you."
+    bn: "নতুন নম্বরে টাকা পাঠানোর সময় আপনি ফোনে কথা বলছেন। প্রতারকেরা প্রায়ই ফোনে থেকে তাড়াহুড়া করায়।"
+  R_AGENT_FRESH_CASHOUT:
+    en: "Money that arrived {mins} minutes ago is being cashed out almost in full."
+    bn: "{mins} মিনিট আগে আসা টাকা প্রায় পুরোটাই ক্যাশ আউট করা হচ্ছে।"
+  R_AGENT_VELOCITY:
+    en: "This agent point is serving many first-time customers right now ({agent_new} in the last hour)."
+    bn: "এই এজেন্ট পয়েন্টে এখন অনেক নতুন গ্রাহক ক্যাশ আউট করছেন (গত এক ঘণ্টায় {agent_new} জন)।"
   R_ATO_COMBO:
     en: "SIM change + new phone + large transfer: this matches account-takeover attacks."
     bn: "সিম পরিবর্তন + নতুন ফোন + বড় অঙ্কের লেনদেন: এটি অ্যাকাউন্ট দখলের আক্রমণের সাথে মিলে যায়।"

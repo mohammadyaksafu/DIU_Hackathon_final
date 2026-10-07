@@ -22,9 +22,15 @@ rules:
 
   - name: MULE_FANIN
     description: First payment to a young wallet that is receiving from many new senders
-    when: "is_new_recipient == 1 and r_new_senders_24h >= 8 and r_tenure_days < 45"
+    when: "is_new_recipient == 1 and r_new_senders_24h >= 8 and r_tenure_days < 45 and r_merchant_profile == 0"
     score: 0.5   # supporting evidence only: online sellers legitimately look like this
     reason: R_RECIPIENT_HIGH_FANIN
+
+  - name: ON_CALL_NEW_RECIPIENT
+    description: Sending to a new number while on a phone call (callers coach victims through scams)
+    when: "on_call == 1 and is_new_recipient == 1 and amount_ratio >= 1.5"
+    score: 0.65
+    reason: R_ON_CALL
 
   - name: REFUND_SCAM
     description: Money from a stranger, then a larger 'refund' to another stranger

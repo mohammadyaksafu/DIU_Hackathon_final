@@ -15,3 +15,6 @@ detectors:
   - name: graph
     class: app.detectors.graph:GraphDetector
     enabled: true
+  - name: agent_cashout
+    class: app.detectors.agent_cashout:AgentCashoutDetector
+    enabled: true

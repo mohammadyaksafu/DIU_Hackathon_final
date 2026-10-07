@@ -94,6 +94,9 @@ CONDITIONS: dict[str, Callable[[dict], bool]] = {
     "R_HIGH_VELOCITY": lambda f: _g(f, "s_out_cnt_1h") >= 3 or _g(f, "s_distinct_recv_24h") >= 5,
     "R_BEHAVIOUR_ANOMALY": lambda f: _g(f, "anomaly_score") >= 0.99,
     "R_NEW_ACCOUNT": lambda f: _g(f, "s_tenure_days", 999) < 30,
+    "R_ON_CALL": lambda f: _g(f, "on_call") == 1,
+    "R_AGENT_FRESH_CASHOUT": lambda f: _g(f, "type_code") == 1 and _g(f, "s_mins_since_inflow", 1440) < 180,
+    "R_AGENT_VELOCITY": lambda f: _g(f, "a_new_customers_1h") >= 3 or _g(f, "a_cashout_rate_ratio") >= 4,
 }
 
 
@@ -113,6 +116,7 @@ def _params(f: dict) -> dict:
         "mins": int(_g(f, "s_mins_since_inflow", 1440)),
         "limit": f"{int(CASH_OUT_LIMIT):,}",
         "cnt_1h": int(_g(f, "s_out_cnt_1h")) + 1,
+        "agent_new": int(_g(f, "a_new_customers_1h")),
     }
 
 
@@ -134,14 +138,17 @@ def select_reasons(features: dict, signals: dict[str, Signal], top_k: int = 3) -
     if rules and rules.ok:
         for code in rules.reason_codes:
             add(code, check=False)
+    agent = signals.get("agent_cashout")  # a specific, high-precision detector: its reasons lead
+    if agent and agent.ok and agent.score >= 0.6:
+        for code in agent.reason_codes:
+            add(code)
     lgbm = signals.get("lgbm")
     if lgbm and lgbm.ok:
         for item in lgbm.details.get("contributions", []):
             if item["contribution"] > 0.05:
                 add(FEATURE_REASON.get(item["feature"], ""))
-    for name in ("graph", "anomaly"):
-        sig = signals.get(name)
-        if sig and sig.ok:
+    for name, sig in signals.items():  # graph, anomaly, agent cash-out and any plug-in detector
+        if name not in ("rules", "lgbm") and sig.ok:
             for code in sig.reason_codes:
                 add(code)
     return ordered[:top_k]
