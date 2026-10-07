@@ -37,6 +37,15 @@ AI DEV FEST 2026 · DIU CPC × upay AI Hackathon · Track 01 *Trust & Risk Intel
 | F8 | Impact & fairness dashboard | Held-out metrics, lift table, per-scenario recall, FPR by segment, live latency |
 | F9 | Synthetic data generator with 6 injected fraud scenarios | Seeded simulation of 7 personas, legit look-alikes and labelled fraud |
 | + | Batch / CSV scoring, behaviour anomaly detection | Isolation Forest (compiled single-row scorer, verified equal to scikit-learn) |
+| F10 | **Agent cash-out module**: fresh inflow drained at an agent, agent serving many first-time customers | Agent-side velocity features + transparent detector; WARN (OTP / voice confirm) or HOLD with the mule graph |
+| F11 | **Beyond a pop-up**: on-call signal, 20 s cooling-off before "send anyway", "call someone you trust", Bangla voice warning | Rule on live call state; Web Speech API; reasons shown only when facts and SHAP agree |
+| F12 | **Customer appeal** ("not a scam?") with a 15-minute SLA; appealed cases jump the queue; `legit` releases the HOLD and becomes a training label | Human-in-the-loop feedback |
+| F13 | **Rollout modes** `shadow → warn → enforce`, fail-safe `on_scoring_error` | Policy config, hot-reloaded |
+| F14 | **WARN user study tool** (`/study`): 3 randomised arms, measured cancel / continue rates with 95% CIs | Experiment design (see [docs/USER_STUDY.md](docs/USER_STUDY.md)) |
+| F15 | **Evidence pack**: ablation with cost and CIs, cost-optimal thresholds, leave-one-family-out, distribution shift, adversarial rounds, leakage audit, harder data, segment fairness | [docs/reports/evaluation.md](docs/reports/evaluation.md) |
+| F16 | **Scale & operations**: several API workers sharing state in Redis, drift (PSI) monitoring, Prometheus + Grafana, Alembic migrations | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+
+**Judges' feedback and what we did:** [docs/JUDGE_RESPONSE.md](docs/JUDGE_RESPONSE.md) · problem evidence with citations: [docs/EVIDENCE.md](docs/EVIDENCE.md) · governance: [docs/GOVERNANCE.md](docs/GOVERNANCE.md) · integration contract: [docs/INTEGRATION.md](docs/INTEGRATION.md)
 
 ## Screenshots
 
@@ -85,7 +94,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · model: [docs/MODEL_CARD
 | API | FastAPI 0.115, Pydantic v2, SQLAlchemy 2, PyJWT, Uvicorn |
 | Storage | SQLite (default, WAL) or PostgreSQL; optional Redis cache |
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, Recharts 3, d3-force |
-| Ops | Docker, docker compose, GitHub Actions (tests, typecheck, build, gitleaks), Prometheus-format `/metrics`, JSON logs |
+| Ops | Docker, docker compose, Alembic migrations, GitHub Actions (tests, typecheck, lint, build, Playwright browser tests, dependency audit, gitleaks), Prometheus-format `/metrics`, JSON logs |
 
 ## 5. Requirements
 
@@ -128,7 +137,9 @@ Backend (`backend/.env`; all optional, safe defaults):
 | Variable | Purpose | Example / default |
 |---|---|---|
 | `DATABASE_URL` | Postgres URL; empty = SQLite in `backend/data/` | `postgresql://user:pass@host:5432/shurokkha` |
-| `REDIS_URL` | Optional cache; falls back to memory | `redis://localhost:6379/0` |
+| `REDIS_URL` | Shared online feature state, rate limits, drift window and metrics for several workers; falls back to memory (one worker) | `redis://localhost:6379/0` |
+| `FEATURE_STORE` | `auto` (Redis when reachable) · `memory` · `redis` | `auto` |
+| `WEB_CONCURRENCY` / `API_WORKERS` | API worker processes (Docker) | `2` |
 | `LLM_PROVIDER` | `auto` (prefers Gemini when configured) · `gemini` · `anthropic` · `none` | `auto` |
 | `GEMINI_API_KEY` | Enables Gemini chat, case summaries, and SOP answers | `<your-ai-studio-key>` |
 | `GEMINI_MODEL` | Gemini model id | `gemini-3.8-flash` |
@@ -160,7 +171,10 @@ To enable Gemini, create an API key in Google AI Studio and add `GEMINI_API_KEY=
 | Run web (dev) | `cd frontend && npm run dev` |
 | Build web | `cd frontend && npm run build && npm start` |
 | Everything in containers | `docker compose up --build` |
-| Load test | `cd backend && python tests/load/bench.py --users 10 --seconds 20` |
+| Load test | `cd backend && python tests/load/bench.py --users 10 --seconds 20` (results: [docs/reports/load_test.md](docs/reports/load_test.md)) |
+| Evidence pack | `cd backend && python -m pipelines.evaluation` (ablation, cost, shift, adversarial, leakage, hard data, fairness; ~10 min) |
+| Robustness / graph benchmark | `python -m pipelines.robustness` · `python -m pipelines.graph_benchmark` |
+| With monitoring | `docker compose --profile monitoring up --build` → Grafana http://localhost:3001 |
 
 ## 9. Live deployment URL
 
@@ -171,10 +185,13 @@ To enable Gemini, create an API key in Google AI Studio and add `GEMINI_API_KEY=
 ## 10. Testing instructions
 
 ```bash
-cd backend && python -m pytest          # 37 tests, ~30 s (trains a small model in a temp dir)
-cd frontend && npm run typecheck && npm run build
+cd backend && python -m pytest          # 49 tests, ~1 min (trains a small model in a temp dir)
+cd frontend && npm run typecheck && npm run lint && npm run build
+cd frontend && npx playwright install chromium && npm run test:e2e   # 12 browser tests; starts API + web itself
 ```
-The suite covers: expression sandbox safety, policy tiers/overrides/hot-reload, point-in-time features, reason-code truthfulness, Bangla rendering, RAG retrieval, LLM grounding rejection, circuit breaker, rules-only degraded mode, auth/roles, validation, idempotency, HOLD/release flow, scam-averted counting, batch CSV, live policy editing, **golden scenarios** (normal → ALLOW; prize scam, refund scam, account takeover, structuring → WARN/HOLD) and a **model quality gate** (ML must beat rules by ≥0.3 PR-AUC, FPR < 2%, every scenario family caught).
+The browser tests (Playwright, also run in CI) drive the real stack: the family transfer is allowed and sent, the account takeover is held and cancelled, the analyst's start-here case opens, the impact page shows its estimates, admin stays locked without its password, an axe audit finds no WCAG 2.1 AA violations on five pages, and the customer page fits a phone screen.
+
+The suite covers: expression sandbox safety, policy tiers/overrides/hot-reload, point-in-time features, reason-code truthfulness, Bangla rendering, RAG retrieval, LLM grounding rejection, circuit breaker, rules-only degraded mode, auth/roles, validation, idempotency, HOLD/release flow, scam-averted counting, batch CSV, live policy editing, database migrations (schema equals the models; pre-Alembic databases adopted), Redis-shared online state (two workers compute identical features; seeding keeps live history), shared rate limits, impact estimate ranges, **golden scenarios** (normal → ALLOW; prize scam, refund scam, account takeover, structuring → WARN/HOLD) and a **model quality gate** (ML must beat rules by ≥0.3 PR-AUC, FPR < 2%, every scenario family caught).
 
 **Manual demo script** (5 min):
 1. **Customer app** → pick *Sadia (remittance receiver)* → **'You won a prize' scam** → Send → Bangla warning → Cancel.
@@ -197,27 +214,29 @@ The suite covers: expression sandbox safety, policy tiers/overrides/hot-reload, 
 
 Demo users: `customer` and `analyst` with `DEMO_PASSWORD`; the web app signs in as them automatically (demo mode). `admin` uses `ADMIN_PASSWORD` and is never signed in automatically: the Admin page is read-only until you enter it.
 
-## 12. Results (held-out test window, synthetic data, model `lgbm-20261001-061952`)
+## 12. Results (held-out test window, synthetic data, deterministic seed-42 model from `pipelines.run_all`)
 
-| Model (same 10-day test set, 22,126 tx) | PR-AUC | Recall @ 1% FPR |
+| Model (same 10-day test set, 22,125 tx) | PR-AUC | Recall @ 1% FPR |
 |---|---|---|
-| Rules only | 0.166 | 15.6% |
-| Logistic regression | 0.822 | 80.1% |
-| LightGBM without graph/anomaly features | 0.952 | 93.8% |
-| **LightGBM + graph + anomaly (Shurokkha)** | **0.995** | **99.5%** |
+| Rules only | 0.167 | 16.0% |
+| Logistic regression | 0.819 | 79.3% |
+| LightGBM without graph/anomaly features | 0.951 | 93.5% |
+| **LightGBM + graph + anomaly (Shurokkha)** | **0.992** | **99.1%** |
 
-Full system through the real policy: **precision 91.7%, recall 96.2%, false-positive rate 0.24%** (≈5 legitimate customers warned per day in this simulation), HOLD precision 98.2%, **94.3% of victim loss value flagged** before completion. Per scenario: account takeover 100%, prize scam 84%, refund scam 100%, mule forward/cash-out 100%, structuring 94%, social engineering 87%.
+Full system through the real policy: **precision 92.4%, recall 96.2%, false-positive rate 0.21%** (≈5 legitimate customers warned per day in this simulation), HOLD precision 98.4%, **93.4% of victim loss value flagged** before completion. Per scenario: account takeover 100%, prize scam 83%, refund scam 100%, mule forward/cash-out 100%, structuring 100%, social engineering 87%.
 
-Measured latency on a laptop (single Uvicorn worker, client on the same machine): server-side scoring ≈5 ms incl. DB write. End-to-end p50 14.5 ms / p95 26 ms at 1 user (47 req/s); p50 121 ms / p95 181 ms at 10 concurrent users (68 req/s).
+Measured in Docker on a laptop ([docs/reports/load_test.md](docs/reports/load_test.md)): 52 → 93 → 169 req/s with 1 → 2 → 4 API workers (16 users, 0 errors, every request persisted); server-side scoring p50 11.6 ms / p95 26 ms under load; killing a worker mid-load lost or duplicated **0** of 2,177 transfers.
 
 ### Robustness: beyond the easy test ([docs/reports/robustness.md](docs/reports/robustness.md))
 Synthetic fraud is easier than real fraud, so we also test what happens when the model meets something new (`python -m pipelines.robustness`):
 
 | Test (ML model alone, 1% FPR operating point) | Result |
 |---|---|
-| **New fraud pattern**: retrain without one family, test on it | prize scam 85% · ATO 87% · refund 76% · social engineering 97% caught, though never seen in training. Weak spots: new mule networks 47%, new structuring 0% (in the full system, deterministic rules and the graph detector cover these) |
-| **Brand-new mule ring** (graph features unavailable) | recall 99% → **94%**, PR-AUC 0.995 → 0.958: live behaviour features carry most of the signal |
-| **Calibration** of the displayed probability | ECE 0.0024. Mid-range scores are *conservative*: transfers scored 0.25–0.50 were fraud 96% of the time, which is why a "38%" transfer is correctly held |
+| **New fraud pattern**: retrain without one family, test on it | prize scam 87% · ATO 96% · refund 65% · social engineering 97% caught, though never seen in training. Weak spots: new mule networks 43%, new structuring 6%; the full system's rules lift structuring to 53% and ATO to 100% ([evaluation §3](docs/reports/evaluation.md)) |
+| **Brand-new mule ring** (graph features unavailable) | recall 100% → **97%**, PR-AUC 0.995 → 0.972: live behaviour features carry most of the signal |
+| **Calibration** of the displayed probability | ECE 0.0026. Mid-range scores are *conservative*: transfers scored 0.25–0.50 were fraud 84% of the time, which is why a "38%" transfer is correctly held |
+| **Harder data** (overlapping behaviour, full retrain) | PR-AUC 0.959, recall @ 1% FPR 93.8%; full system precision 85.7%, recall 91.9%, FPR 0.37% |
+| **Adversarial drift** (smaller amounts, slower mules, old phones) | recall 96.9% → 86.5%; after retraining on the attack 98.8% (round 1) and 98.3% (round 2, strong attack) |
 
 
 > **Honest caveat:** these are results on our own synthetic data, whose patterns we designed. They show the pipeline works and that graph features add real lift. Real-world performance must be established with governed upay data (shadow mode first; see the model card).
@@ -232,7 +251,8 @@ Synthetic fraud is easier than real fraud, so we also test what happens when the
 
 ## 14. Scaling & limitations
 
-- Stateless HTTP layer; online feature state lives in-process (one worker). To scale horizontally, move the feature state to Redis or a feature store (Feast) and stream events via Kafka. The interfaces are already separated (`FeatureEngine`, `GraphStore`, `Cache`).
+- **Several API workers.** With `REDIS_URL` set, the online state is shared in Redis (`app/features/store.py`): per-wallet feature state, live graph edges and rate-limit counters. The warm state from the training replay is copied into Redis once per dataset, so every worker computes exactly the same features (tested) and live history survives an API restart. Docker Compose runs 2 workers (`WEB_CONCURRENCY`); without Redis the API falls back to one in-memory worker. Next step at real scale: a feature store (Feast) fed by Kafka.
+- **Database migrations** with Alembic (`backend/migrations`). The API upgrades the schema on startup; databases created before migrations existed are adopted without data loss. A test fails if a model changes without a migration.
 - Graph snapshots are recomputed in batch (cold path); production would use incremental graph processing.
 - BM25 retrieval can be swapped for multilingual embeddings behind the same `search()` interface.
 

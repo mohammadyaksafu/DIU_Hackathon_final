@@ -319,6 +319,7 @@ Containers restart automatically after a crash or a server reboot (`restart: unl
 
 ## Notes
 
-- The API runs as a single worker on purpose: the live feature state is held in memory (see README, "Scaling"). Do not add `--workers`.
+- The API shares its live feature state, graph edges and rate limits through Redis, so it can run several worker processes: set `API_WORKERS=2` in `.env` (default 1; each worker holds its own copy of the model, so check `free -m` first). Live history also survives `dc restart api`.
+- Database schema changes are Alembic migrations, applied automatically when the API starts. To check the current revision: `dc exec api python -m alembic current`.
 - The model and synthetic data are baked into the API image at build time (seed 42), so every rebuild produces the same model.
 - `/metrics` (Prometheus) is blocked from the internet by Caddy. From the server, use `dc exec api curl -s localhost:8000/metrics`.

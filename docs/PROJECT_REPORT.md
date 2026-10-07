@@ -34,35 +34,37 @@ F1 real-time scoring · F2 hybrid decision engine · F3 verified Bangla/English 
 
 **GenAI.** One gateway for Google Gemini (default when a key is set) or Anthropic Claude, with JSON-schema output, a timeout and circuit breaker, and a server-side fallback. The prompt allows only evidence facts. Untrusted text is isolated, and every number in the narrative must exist in the evidence, otherwise a template is used. The LLM never decides.
 
-**Evaluation.** Time-based split with a held-out 10-day test window (22,126 transactions):
+**Evaluation.** Time-based split with a held-out 10-day test window (22,125 transactions):
 
 | Model | PR-AUC | Recall @ 1% FPR |
 |---|---|---|
-| Rules only | 0.166 | 15.6% |
-| Logistic regression | 0.822 | 80.1% |
-| LightGBM, no graph/anomaly | 0.952 | 93.8% |
-| **Shurokkha (LightGBM + graph + anomaly)** | **0.995** | **99.5%** |
+| Rules only | 0.167 | 16.0% |
+| Logistic regression | 0.819 | 79.3% |
+| LightGBM, no graph/anomaly | 0.951 | 93.5% |
+| **Shurokkha (LightGBM + graph + anomaly)** | **0.992** | **99.1%** |
 
-Full system: precision 91.7%, recall 96.2%, FPR 0.24%, HOLD precision 98.2%. Per-scenario recall: ATO 100%, prize scam 84%, refund scam 100%, mule flows 100%, structuring 94%, social engineering 87%.
+Full system: precision 92.4%, recall 96.2%, FPR 0.21%, HOLD precision 98.4%. Per-scenario recall: ATO 100%, prize scam 83%, refund scam 100%, mule flows 100%, structuring 100%, social engineering 87%.
 
-**Robustness** (docs/reports/robustness.md). Because synthetic fraud is easier than real fraud, we also test generalisation. Retrained *without* a fraud family, the model still catches it at 1% FPR: prize scam 85%, ATO 87%, refund 76%, social engineering 97%. Weak spots are new mule networks (47%) and new structuring (0%), which the rules and graph detector cover in the full system. With a brand-new mule ring (graph features unavailable), recall falls only from 99% to 94%. Calibration error is 0.0024; mid-range scores are conservative (scores of 0.25–0.50 were fraud 96% of the time).
+**Evidence pack** (docs/reports/evaluation.md). Ablation with bootstrap 95% CIs and an explicit cost function: rules only ৳40,999/day expected cost → LightGBM ৳17,653 → + Isolation Forest ৳16,813 → + graph ৳7,177; the full system keeps that cost (৳7,185) while adding rules that catch unseen fraud (leave-one-family-out: structuring 0% → 53%, ATO 72% → 100%, refund 47% → 62%). Distribution shift: covariate shift keeps recall at 96.9% (FP burden rises to 87 per 10k); adversarial drift lowers recall to 86.5%, and retraining on the attack restores 98.8%. Harder overlapping data: PR-AUC 0.959. Leakage audit: no single feature separates the classes on its own.
+
+**Robustness** (docs/reports/robustness.md). Because synthetic fraud is easier than real fraud, we also test generalisation. Retrained *without* a fraud family, the model still catches it at 1% FPR: prize scam 87%, ATO 96%, refund 65%, social engineering 97%. Weak spots are new mule networks (43%) and new structuring (6%), which the rules and graph detector cover in the full system. With a brand-new mule ring (graph features unavailable), recall falls only from 100% to 97%. Calibration error is 0.0026; mid-range scores are conservative (scores of 0.25–0.50 were fraud 84% of the time).
 
 **GenAI evaluation** (docs/reports/genai_eval.md). 20 case summaries (10 HOLD, 10 WARN): 100% numbers grounded, 100% valid citations, 100% decision-consistent, 100% SOP-referenced actions; fabricated numbers are rejected by the guard. The evaluation also found and fixed a bug in which "SOP-05" was read as the number 5.
 
 ## 6. Real-life impact
-- **Customers:** 94.3% of victim-loss value was flagged before completion in the test window. Assuming 60% of warned customers cancel (to be measured in a pilot), the estimated loss prevented was ৳606,100 in 10 days of this simulation, at the cost of ≈5 legitimate customers warned per day.
-- **Operations:** ranked queue with 98% HOLD precision; case summaries with SOP-cited next steps; median time-to-decision is tracked live.
+- **Customers:** 93.4% of victim-loss value was flagged before completion in the test window. If 40–80% of warned customers cancel (being measured with the built-in user study, docs/USER_STUDY.md), the estimated loss prevented is **৳593,300–৳600,300** (central ৳596,800 at 60%) in 10 days of this simulation, at the cost of ≈5 legitimate customers warned per day. The range is narrow because 97.1% of the flagged loss is held for an analyst rather than only warned; that part assumes analysts do not release fraud (HOLD precision 98.4%). ROI (simulated): net benefit ≈৳55,000/day against ≈৳4,600/day running cost; it pays for itself at any cancel rate because held transfers alone cover the cost.
+- **Operations:** ranked queue with 98% HOLD precision; case summaries with SOP-cited next steps; median time-to-decision is tracked live. Analyst workload: 61 alerts/day × 15 min by hand = 15.2 analyst-hours (2.5 analysts); with the evidence pack, ring graph and AI summary at an assumed 6 min per case = 6.1 hours (1.0 analyst), **≈9 analyst-hours saved per day** for this 2,000-customer simulation. Minutes per case are assumptions to be timed in a pilot; the Impact page shows the calculation.
 - **Ecosystem:** mule-ring detection disrupts the cash-out network, not just single transactions.
 - **Inclusion:** Bangla-first, plain-language explanations protect first-time users without blocking them.
 
 ## 7. Scalability & integration
-Pre-authorisation hook (`/score`) + confirm callback; versioned REST API with OpenAPI docs; Docker; Postgres/Redis support; plug-in detectors and hot-reload policy. Production path: shared online feature store (Redis/Feast), streaming ingestion (Kafka), incremental graph processing, shadow → canary → A/B rollout (ARCHITECTURE.md). Validation with upay data: offline back-test → shadow mode → WARN-only pilot → HOLD with SLAs.
+Pre-authorisation hook (`/score`) + confirm callback; versioned REST API with OpenAPI docs; Docker; Postgres/Redis support; plug-in detectors and hot-reload policy. Online state is already shared in Redis, so the API runs several workers and keeps live history across restarts; the schema is managed by Alembic migrations. Production path: Feast feature store, streaming ingestion (Kafka), incremental graph processing, shadow → canary → A/B rollout (ARCHITECTURE.md). Validation with upay data: offline back-test → shadow mode → WARN-only pilot → HOLD with SLAs.
 
 ## 8. Responsible AI & security
 Synthetic data only; pseudonymous ids to the LLM; verified explanations; fairness audit (shopkeepers and new accounts currently show higher FPR → segment overrides / merchant onboarding); human review for every HOLD; no permanent auto-block; sandboxed policy expressions; JWT roles; admin password never shipped to the browser; dependency vulnerability audit in CI (0 known vulnerabilities); rate limiting; prompt-injection isolation; audit log.
 
 ## 9. Limitations & future work
-Synthetic patterns are easier than real fraud; single-worker online state; small calibration window; BM25 retrieval. Next: shared feature store, real-data shadow evaluation, uplift testing of warning designs, Bangla voice warnings, agent-risk benchmarking.
+Synthetic patterns are easier than real fraud; online state shared in Redis but not yet a full feature store; small calibration window; BM25 retrieval. Next: Feast feature store fed by Kafka, real-data shadow evaluation, uplift testing of warning designs, Bangla voice warnings, agent-risk benchmarking.
 
 ## 10. Disclosures
 See DISCLOSURES.md. External services: Google Gemini API and Anthropic Claude API (both optional). No external datasets or pre-trained models.
