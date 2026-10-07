@@ -46,6 +46,9 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging()
     started = time.time()
+    import anyio.to_thread
+
+    anyio.to_thread.current_default_thread_limiter().total_tokens = settings.threadpool_size
     with get_cache().lock("migrate", timeout=120):  # several workers boot at once
         init_db()
     state = get_state()

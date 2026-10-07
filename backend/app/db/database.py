@@ -26,6 +26,8 @@ def get_engine():
         if url.startswith("sqlite"):
             settings.data_dir.mkdir(parents=True, exist_ok=True)
             kwargs["connect_args"] = {"check_same_thread": False, "timeout": 15}
+        else:  # each worker serves up to 40 concurrent requests; do not make them queue for 5 connections
+            kwargs.update(pool_size=settings.db_pool_size, max_overflow=settings.db_pool_size, pool_timeout=10)
         _engine = create_engine(url, **kwargs)
         if url.startswith("sqlite"):
 

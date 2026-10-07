@@ -1,0 +1,24 @@
+[
+  {
+    "users": 100,
+    "seconds": 302.2,
+    "scored": 20936,
+    "confirms": 20936,
+    "throughput_scores_per_s": 69.3,
+    "throughput_requests_per_s": 138.6,
+    "client_p50_ms": 567.1,
+    "client_p95_ms": 1906.6,
+    "client_p99_ms": 2508.4,
+    "server_p50_ms": 38.8,
+    "server_p95_ms": 105.8,
+    "server_p99_ms": 161.1,
+    "errors": 0,
+    "error_rate": 0.0,
+    "status": {},
+    "decisions": {
+      "ALLOW": 13005,
+      "WARN": 4455,
+      "HOLD": 3476
+    }
+  }
+]

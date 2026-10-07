@@ -140,6 +140,7 @@ Backend (`backend/.env`; all optional, safe defaults):
 | `REDIS_URL` | Shared online feature state, rate limits, drift window and metrics for several workers; falls back to memory (one worker) | `redis://localhost:6379/0` |
 | `FEATURE_STORE` | `auto` (Redis when reachable) · `memory` · `redis` | `auto` |
 | `WEB_CONCURRENCY` / `API_WORKERS` | API worker processes (Docker) | `2` |
+| `THREADPOOL_SIZE` / `DB_POOL_SIZE` | Handler threads per worker / PostgreSQL connections per worker (+ same overflow) | `8` / `20` |
 | `LLM_PROVIDER` | `auto` (prefers Gemini when configured) · `gemini` · `anthropic` · `none` | `auto` |
 | `GEMINI_API_KEY` | Enables Gemini chat, case summaries, and SOP answers | `<your-ai-studio-key>` |
 | `GEMINI_MODEL` | Gemini model id | `gemini-3.8-flash` |
@@ -172,6 +173,8 @@ To enable Gemini, create an API key in Google AI Studio and add `GEMINI_API_KEY=
 | Build web | `cd frontend && npm run build && npm start` |
 | Everything in containers | `docker compose up --build` |
 | Load test | `cd backend && python tests/load/bench.py --users 10 --seconds 20` (results: [docs/reports/load_test.md](docs/reports/load_test.md)) |
+| Bank-style load test | `python tests/load/bank_load.py --stages 50,100,200,400,800 --stage-seconds 60 --procs 3` · soak: `--soak 300 --users 100` (set `RATE_LIMIT_PER_MINUTE` high first) |
+| Chaos / graph under load | `python tests/load/chaos.py --kill-cmd "..."` · `python tests/load/graph_under_load.py` |
 | Evidence pack | `cd backend && python -m pipelines.evaluation` (ablation, cost, shift, adversarial, leakage, hard data, fairness; ~10 min) |
 | Robustness / graph benchmark | `python -m pipelines.robustness` · `python -m pipelines.graph_benchmark` |
 | With monitoring | `docker compose --profile monitoring up --build` → Grafana http://localhost:3001 |
@@ -225,7 +228,12 @@ Demo users: `customer` and `analyst` with `DEMO_PASSWORD`; the web app signs in 
 
 Full system through the real policy: **precision 92.4%, recall 96.2%, false-positive rate 0.21%** (≈5 legitimate customers warned per day in this simulation), HOLD precision 98.4%, **93.4% of victim loss value flagged** before completion. Per scenario: account takeover 100%, prize scam 83%, refund scam 100%, mule forward/cash-out 100%, structuring 100%, social engineering 87%.
 
-Measured in Docker on a laptop ([docs/reports/load_test.md](docs/reports/load_test.md)): 52 → 93 → 169 req/s with 1 → 2 → 4 API workers (16 users, 0 errors, every request persisted); server-side scoring p50 11.6 ms / p95 26 ms under load; killing a worker mid-load lost or duplicated **0** of 2,177 transfers.
+Measured in Docker on one 4-core laptop ([docs/reports/load_test.md](docs/reports/load_test.md)):
+- **Scaling:** 52 → 93 → 169 req/s with 1 → 2 → 4 API workers (0 errors).
+- **Bank-style load:** realistic MFS traffic mix, each transfer scored then confirmed and persisted, ramped to **800 concurrent users**. Peak 68 transfers/s (136 req/s), 0 errors up to 200 users, < 0.2% client timeouts at 400–800 users.
+- **Soak:** 5 minutes at 100 users, **69 transfers/s with 0 errors** and flat memory.
+- **Chaos:** killing a worker mid-load lost or duplicated **0** of 2,177 transfers.
+- **Limit:** the laptop CPU is the ceiling, shared by the load generator and the whole stack. The capacity model estimates 60–80 transfers/s per server core.
 
 ### Robustness: beyond the easy test ([docs/reports/robustness.md](docs/reports/robustness.md))
 Synthetic fraud is easier than real fraud, so we also test what happens when the model meets something new (`python -m pipelines.robustness`):

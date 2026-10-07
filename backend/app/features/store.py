@@ -26,9 +26,19 @@ SEEDED = PREFIX + "seeded"
 EDGES = PREFIX + "edges"
 
 
-def dump_wallet(st: WalletState) -> bytes:
+# Hub wallets (agents, merchants, billers, telco) receive thousands of transfers a week. Storing their full
+# 7-day history would make every update re-serialise megabytes, so only the most recent entries are kept.
+# Customer wallets keep their full window (all model features). For hubs this only affects agent
+# velocity, which is computed as a rate over the retained span, so it stays a valid estimate.
+HUB_HISTORY = 400
+
+
+def dump_wallet(st: WalletState, wallet_id: str = "C") -> bytes:
+    inn, out = list(st.inn), list(st.out)
+    if not wallet_id.startswith("C"):
+        inn, out = inn[-HUB_HISTORY:], out[-HUB_HISTORY:]
     return orjson.dumps({
-        "first_seen": st.first_seen, "out": list(st.out), "inn": list(st.inn), "known_out": st.known_out,
+        "first_seen": st.first_seen, "out": out, "inn": inn, "known_out": st.known_out,
         "known_in": sorted(st.known_in), "n_out": st.n_out, "mean": st.mean, "m2": st.m2, "hours": st.hours,
         "devices": st.devices, "last_geo": st.last_geo, "sim_swap": st.sim_swap, "pwd_reset": st.pwd_reset,
     })
@@ -60,7 +70,7 @@ class RedisWalletStore:
         return st
 
     def __setitem__(self, wallet_id: str, st: WalletState) -> None:
-        self.r.set(WALLET + wallet_id, dump_wallet(st))
+        self.r.set(WALLET + wallet_id, dump_wallet(st, wallet_id))
 
     def __contains__(self, wallet_id: str) -> bool:
         return bool(self.r.exists(WALLET + wallet_id))
@@ -71,7 +81,7 @@ class RedisWalletStore:
     @contextmanager
     def locked(self, *wallet_ids: str):
         """Serialise read-modify-write of the same wallets across workers (sorted => no deadlock)."""
-        locks = [self.r.lock(f"{PREFIX}lock:{w}", timeout=5, blocking_timeout=5) for w in sorted(set(wallet_ids))]
+        locks = [self.r.lock(f"{PREFIX}lock:{w}", timeout=5, blocking_timeout=5, sleep=0.002) for w in sorted(set(wallet_ids))]
         held = []
         try:
             for lock in locks:
@@ -101,7 +111,7 @@ def seed(client, wallets: dict, fingerprint: str) -> bool:
     client.delete(EDGES)
     pipe = client.pipeline(transaction=False)
     for i, (wid, st) in enumerate(wallets.items(), 1):
-        pipe.set(WALLET + wid, dump_wallet(st))
+        pipe.set(WALLET + wid, dump_wallet(st, wid))
         if i % 2000 == 0:
             pipe.execute()
     pipe.execute()

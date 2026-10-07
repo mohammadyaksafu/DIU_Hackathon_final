@@ -1,0 +1,118 @@
+[
+  {
+    "users": 50,
+    "seconds": 61.2,
+    "scored": 3966,
+    "confirms": 3966,
+    "throughput_scores_per_s": 64.8,
+    "throughput_requests_per_s": 129.5,
+    "client_p50_ms": 290.9,
+    "client_p95_ms": 928.7,
+    "client_p99_ms": 1384.7,
+    "server_p50_ms": 34.6,
+    "server_p95_ms": 98.1,
+    "server_p99_ms": 164.5,
+    "errors": 0,
+    "error_rate": 0.0,
+    "status": {},
+    "decisions": {
+      "ALLOW": 2833,
+      "WARN": 647,
+      "HOLD": 486
+    }
+  },
+  {
+    "users": 100,
+    "seconds": 62.3,
+    "scored": 4223,
+    "confirms": 4223,
+    "throughput_scores_per_s": 67.8,
+    "throughput_requests_per_s": 135.5,
+    "client_p50_ms": 515.7,
+    "client_p95_ms": 2069.0,
+    "client_p99_ms": 2365.9,
+    "server_p50_ms": 39.8,
+    "server_p95_ms": 97.8,
+    "server_p99_ms": 154.5,
+    "errors": 0,
+    "error_rate": 0.0,
+    "status": {},
+    "decisions": {
+      "WARN": 890,
+      "ALLOW": 2671,
+      "HOLD": 662
+    }
+  },
+  {
+    "users": 200,
+    "seconds": 63.4,
+    "scored": 3897,
+    "confirms": 3897,
+    "throughput_scores_per_s": 61.5,
+    "throughput_requests_per_s": 123.0,
+    "client_p50_ms": 1364.8,
+    "client_p95_ms": 3102.0,
+    "client_p99_ms": 5575.9,
+    "server_p50_ms": 45.3,
+    "server_p95_ms": 111.8,
+    "server_p99_ms": 159.4,
+    "errors": 0,
+    "error_rate": 0.0,
+    "status": {},
+    "decisions": {
+      "ALLOW": 2209,
+      "WARN": 926,
+      "HOLD": 762
+    }
+  },
+  {
+    "users": 400,
+    "seconds": 69.0,
+    "scored": 2597,
+    "confirms": 2593,
+    "throughput_scores_per_s": 37.6,
+    "throughput_requests_per_s": 75.2,
+    "client_p50_ms": 4288.5,
+    "client_p95_ms": 10028.5,
+    "client_p99_ms": 12674.5,
+    "server_p50_ms": 56.6,
+    "server_p95_ms": 167.7,
+    "server_p99_ms": 249.8,
+    "errors": 9,
+    "error_rate": 0.00345,
+    "status": {
+      "ReadError": 5,
+      "RemoteProtocolError": 4
+    },
+    "decisions": {
+      "WARN": 673,
+      "HOLD": 517,
+      "ALLOW": 1407
+    }
+  },
+  {
+    "users": 800,
+    "seconds": 74.6,
+    "scored": 2714,
+    "confirms": 2698,
+    "throughput_scores_per_s": 36.4,
+    "throughput_requests_per_s": 72.5,
+    "client_p50_ms": 9739.3,
+    "client_p95_ms": 18471.4,
+    "client_p99_ms": 25339.9,
+    "server_p50_ms": 50.6,
+    "server_p95_ms": 135.8,
+    "server_p99_ms": 193.4,
+    "errors": 32,
+    "error_rate": 0.01165,
+    "status": {
+      "ReadError": 30,
+      "RemoteProtocolError": 2
+    },
+    "decisions": {
+      "HOLD": 609,
+      "ALLOW": 1414,
+      "WARN": 691
+    }
+  }
+]

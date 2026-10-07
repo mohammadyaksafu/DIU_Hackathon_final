@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Storage
     database_url: str = ""  # default: SQLite file inside data_dir
     redis_url: str = ""  # optional; in-memory cache when empty
+    # Threads per worker for request handlers. Scoring is CPU-bound Python, so a few threads per worker
+    # (and more workers) beat many threads fighting over one interpreter lock.
+    threadpool_size: int = 8
+    db_pool_size: int = 20  # PostgreSQL connections per API worker (plus the same again as overflow)
     # Online feature state: auto => Redis when REDIS_URL is reachable (several workers), else memory (one worker)
     feature_store: str = "auto"  # auto | memory | redis
 

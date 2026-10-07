@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import nullcontext
 import uuid
 from typing import Literal
 
@@ -84,7 +85,8 @@ def _score(state: AppState, req: ScoreRequest, actor: str, persist: bool, key: s
     ctx = ScoringContext(tx=tx, features={})
     scoring_error = None
     try:
-        with state.lock:
+        # In-process lock only for the in-memory engine; the Redis store is safe across threads and workers.
+        with nullcontext() if state.shared_state else state.lock:
             ctx.features = build_features(state.engine, tx, state.graph.snapshot)
         detectors.run(ctx)
         names, rule_hits = _signal_names(ctx)
@@ -157,7 +159,7 @@ def _persist(state: AppState, tx: dict, ctx: ScoringContext, response: dict, act
             alert_id = alert.id
             response["alert_id"] = alert_id
         stored_tx = {k: tx[k] for k in ("tx_id", "ts", "type", "amount", "sender", "receiver", "device_id", "geo_cell", "channel", "on_call")}
-        db.merge(ScoredTransaction(tx_id=tx["tx_id"], payload=stored_tx, decision=response["decision"],
+        db.add(ScoredTransaction(tx_id=tx["tx_id"], payload=stored_tx, decision=response["decision"],
                                    risk_score=response["risk_score"], alert_id=alert_id, latency_ms=response["latency_ms"]))
         db.add(AuditLog(actor=actor, event="decision", tx_id=tx["tx_id"], alert_id=alert_id,
                         payload={"decision": response["decision"], "policy_decision": response["policy_decision"],
@@ -165,12 +167,12 @@ def _persist(state: AppState, tx: dict, ctx: ScoringContext, response: dict, act
                                  "model_version": response["model_version"], "policy_version": response["policy_version"],
                                  "reasons": response["reason_codes"], "degraded": response["degraded_reasons"]}))
         if key:
-            db.merge(IdempotencyRecord(key=key, response=response))
+            db.add(IdempotencyRecord(key=key, response=response))  # key claimed under the idempotency lock
 
 
 def ingest_committed(state: AppState, tx: dict) -> None:
     """A transaction that actually happened becomes history for future features."""
-    with state.lock:
+    with nullcontext() if state.shared_state else state.lock:  # Redis mode: per-wallet locks inside update()
         state.engine.update(tx)
         state.graph.add_edge(tx)
 

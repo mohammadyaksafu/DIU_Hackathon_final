@@ -54,7 +54,7 @@ Phase 1 score ≈ 83/100. The judges' common message: *"It works on synthetic da
 ## Scalability & integration (7.67 / 10)
 | Comment | What we did | Evidence |
 |---|---|---|
-| Load test, p95/p99 | 1 → 2 → 4 workers: 52 → 93 → 169 req/s, 0 errors; server p50/p95/p99 11.6 / 26.0 / 35.8 ms | [load_test.md](reports/load_test.md) (Measured, laptop) |
+| Load test, p95/p99 | Results:<br>• 1 → 2 → 4 workers: 52 → 93 → 169 req/s, 0 errors.<br>• **Bank-style ramp to 800 concurrent users** with a realistic traffic mix (score + confirm + audit): peak 68 transfers/s, 0 errors to 200 users.<br>• **5-minute soak at 69 transfers/s with 0 errors.**<br>• Profiling under load fixed three bottlenecks (server p50 at 400 users: 1.2 s → 57 ms).<br>• Capacity model: 60–80 transfers/s per core. | [load_test.md](reports/load_test.md) (Measured, 4-core laptop) |
 | Failover and monitoring | Prometheus + provisioned Grafana dashboard (profile `monitoring`); worker failover measured; fail-safe `on_scoring_error` | `deploy/monitoring`, [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Graph refresh will slow down | Benchmark: rebuild grows ≈linearly with edges in a fixed 14-day window and runs off the request path; under continuous ingestion (2,285 committed transfers in 40 s) rebuilds took 0.83–1.28 s while scoring continued | [graph_benchmark.md](reports/graph_benchmark.md), [load_test.md](reports/load_test.md) (Measured) |
 | Integration contract | OpenAPI, sample payloads, sequence diagram, timeout rule | [INTEGRATION.md](INTEGRATION.md) |

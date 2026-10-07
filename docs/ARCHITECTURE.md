@@ -64,3 +64,11 @@ JWT (HS256) with roles `customer` / `analyst` / `admin` (admin passes every role
 | Cases, audit, decisions | PostgreSQL, Alembic migrations | transactions + conditional updates |
 
 Monitoring: `docker compose --profile monitoring up` adds Prometheus and a provisioned Grafana dashboard (`deploy/monitoring`).
+
+Throughput settings (from the bank-style load test):
+- **Threads:** 8 handler threads per worker; scoring is CPU-bound, so more workers beat more threads.
+- **Database:** a 20+20 PostgreSQL pool per worker; PostgreSQL group commit with durability kept.
+- **Hub wallets:** agents, billers and the telco store only their last 400 history entries in Redis.
+- **Locking:** no per-process lock in Redis mode.
+
+See [reports/load_test.md](reports/load_test.md).

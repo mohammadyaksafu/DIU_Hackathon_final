@@ -3,6 +3,10 @@
 services:
   postgres:
     image: postgres:16-alpine
+    # Throughput tuning, durability kept (synchronous_commit stays on): group commit lets concurrent
+    # transactions share one WAL flush; enough connections for every API worker's pool.
+    command: ["postgres", "-c", "max_connections=400", "-c", "commit_delay=200", "-c", "commit_siblings=5",
+              "-c", "shared_buffers=256MB", "-c", "wal_buffers=16MB", "-c", "max_wal_size=2GB"]
     environment:
       POSTGRES_USER: shurokkha
       POSTGRES_PASSWORD: shurokkha
