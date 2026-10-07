@@ -22,12 +22,14 @@ export default function AnalystQueue() {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<"risk" | "newest">("risk");
   const [page, setPage] = useState(1);
+  const [appealed, setAppealed] = useState(false);
   const size = 20;
 
   const params = new URLSearchParams({ page: String(page), size: String(size), sort });
   if (status) params.set("status", status);
   if (decision) params.set("decision", decision);
   if (q) params.set("q", q);
+  if (appealed) params.set("appealed", "true");
   const { data, error, loading, reload } = useApi(() => api<Page>(`/alerts?${params}`, { role: "analyst" }), [params.toString()]);
   const pages = data ? Math.max(1, Math.ceil(data.total / size)) : 1;
 
@@ -65,6 +67,10 @@ export default function AnalystQueue() {
           <option value="risk">Highest risk first</option>
           <option value="newest">Newest first</option>
         </select>
+        <label className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+          <input type="checkbox" checked={appealed} onChange={(e) => { setAppealed(e.target.checked); setPage(1); }} />
+          Customer appeals only
+        </label>
         <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search wallet or tx id" aria-label="Search wallet or transaction id"
           className="min-w-48 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:flex-none" />
       </div>
@@ -91,7 +97,8 @@ export default function AnalystQueue() {
                   <tr key={a.id} className="border-b border-line/70 transition-colors hover:bg-brand-soft/40">
                     <td className="py-2 pr-3">
                       <Link href={`/analyst/cases/${a.id}`} className="font-medium text-brand underline-offset-2 hover:underline">#{a.id}</Link>
-                      {a.source === "live" && <span className="ml-1"><Pill tone="brand">live</Pill></span>}
+                      {a.source !== "seed" && <span className="ml-1"><Pill tone="brand">{a.source}</Pill></span>}
+                      {a.appealed_at && !a.label && <span className="ml-1"><Pill>appeal · reply by {fmtTime(a.appealed_at + 15 * 60)}</Pill></span>}
                     </td>
                     <td className="py-2 pr-3"><DecisionBadge decision={a.decision} /></td>
                     <td className="tabular py-2 pr-3 text-right">{a.risk_score.toFixed(3)}</td>

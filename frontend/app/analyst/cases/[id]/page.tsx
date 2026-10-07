@@ -112,6 +112,7 @@ export default function CasePage() {
         <RiskLevel score={c.risk_score} decision={c.decision} />
         <Pill>{c.status.toLowerCase()}{c.label ? ` · ${c.label}` : ""}</Pill>
         {c.customer_action && <Pill tone="brand">customer {c.customer_action}</Pill>}
+        {c.appealed_at && <Pill tone="brand">customer appealed{c.appeal_note ? `: “${c.appeal_note}”` : ""}</Pill>}
         {c.ground_truth_scenario && <Pill>synthetic ground truth: {c.ground_truth_scenario}</Pill>}
       </div>
 

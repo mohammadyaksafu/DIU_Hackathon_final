@@ -16,6 +16,8 @@ export interface LangMessage {
 export interface ScoreResponse {
   transaction_id: string;
   decision: Decision;
+  policy_decision?: Decision;
+  mode?: "shadow" | "warn" | "enforce";
   risk_score: number;
   signals: SignalOut[];
   reason_codes: string[];
@@ -66,6 +68,7 @@ export interface TxPayload {
   device_id?: string | null;
   geo_cell?: string | null;
   channel?: string;
+  on_call?: boolean;
 }
 
 export interface AlertSummary {
@@ -84,6 +87,8 @@ export interface AlertSummary {
   label: string | null;
   customer_action: string | null;
   source: string;
+  appealed_at?: number | null;
+  appeal_note?: string | null;
 }
 
 export interface Contribution {

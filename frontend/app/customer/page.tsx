@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { Button, Card, DecisionBadge, ErrorBox, Pill, RiskLevel, ScoreBar, Spinner, useApi } from "@/components/ui";
 import { api, fmtBDT } from "@/lib/api";
@@ -17,6 +17,25 @@ const PERSONA_LABEL: Record<string, string> = {
   freelancer: "Freelancer",
 };
 const TX_TYPES = ["send_money", "payment", "cash_out"];
+const COOL_OFF_SECONDS = 20;
+
+/** Read the warning aloud (Bangla voice when the device has one) for customers who find reading hard. */
+function speak(text: string, lang: Lang) {
+  try {
+    const synth = window.speechSynthesis;
+    if (!synth) return false;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang === "bn" ? "bn-BD" : "en-US";
+    const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith(lang === "bn" ? "bn" : "en"));
+    if (voice) u.voice = voice;
+    u.rate = 0.9;
+    synth.speak(u);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const EXPECTED_BN: Record<string, string> = { ALLOW: "অনুমোদন (ALLOW)", "WARN/HOLD": "সতর্কতা বা স্থগিত (WARN/HOLD)", HOLD: "স্থগিত (HOLD)" };
 const TX_TYPE_BN: Record<string, string> = { send_money: "সেন্ড মানি", payment: "পেমেন্ট", cash_out: "ক্যাশ আউট" };
 // Bangla explanation for every field of the /score request body, in the order it is sent.
@@ -28,6 +47,7 @@ const FIELD_BN: { key: keyof TxPayload; label: string; help: string }[] = [
   { key: "device_id", label: "ফোন / ডিভাইস", help: "নিজের পুরনো ফোন নাকি নতুন ফোন" },
   { key: "geo_cell", label: "এলাকা", help: "গ্রাহকের নিজের এলাকা নাকি অন্য জায়গা" },
   { key: "channel", label: "চ্যানেল", help: "অ্যাপ থেকে লেনদেন" },
+  { key: "on_call", label: "ফোনে কল চলছে", help: "কথা বলতে বলতে নতুন নম্বরে টাকা পাঠানো প্রতারণার বড় লক্ষণ" },
 ];
 const SAFETY_EXAMPLES = [
   {
@@ -86,6 +106,13 @@ export default function CustomerPage() {
   const scenarios = useApi(() => api<Scenario[]>("/simulator/scenarios", { role: "customer" }));
   const [active, setActive] = useState<{ scenario: Scenario; run: ScenarioRun } | null>(null);
   const [tab, setTab] = useState<"demo" | "ai" | "learn">("demo");
+  const [coolOff, setCoolOff] = useState(0);
+  const [appeal, setAppeal] = useState<string | null>(null);
+  useEffect(() => {
+    if (coolOff <= 0) return;
+    const t = window.setTimeout(() => setCoolOff((s) => s - 1), 1000);
+    return () => window.clearTimeout(t);
+  }, [coolOff]);
   const TABS = [
     { key: "demo", label: "① ডেমো পরিস্থিতি", hint: "Scenarios" },
     { key: "ai", label: "② এআই কী দেখল", hint: "What the AI saw" },
@@ -134,14 +161,27 @@ export default function CustomerPage() {
     setBusy(true);
     setError(null);
     setOutcome(null);
+    setAppeal(null);
     try {
       const r = await api<ScoreResponse>("/score", { role: "customer", body: { ...tx, amount } });
       setResult(r);
+      // Cooling-off: a risky payment to a new number cannot be pushed through in a panic.
+      setCoolOff(r.decision === "WARN" ? COOL_OFF_SECONDS : 0);
       if (r.decision === "ALLOW") await confirm(r, "sent");
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendAppeal(r: ScoreResponse) {
+    try {
+      const res = await api<{ status: string; sla_minutes?: number }>(`/transactions/${r.transaction_id}/appeal`,
+        { role: "customer", body: { note: "Customer says this transfer is genuine" } });
+      setAppeal(res.status === "appealed" ? `appealed:${res.sla_minutes ?? 15}` : res.status);
+    } catch (e) {
+      setError((e as Error).message);
     }
   }
 
@@ -211,6 +251,10 @@ export default function CustomerPage() {
                 }}
                   className="tabular mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink" required />
               </label>
+              <label className="flex items-center gap-2 text-xs text-ink-2">
+                <input type="checkbox" checked={!!tx?.on_call} onChange={(e) => tx && setTx({ ...tx, on_call: e.target.checked })} />
+                {lang === "bn" ? "আমি এখন ফোনে কথা বলছি (ডেমো: অ্যাপ কল শনাক্ত করে)" : "I am on a phone call right now (demo: the app detects calls)"}
+              </label>
               {tx?.device_id && tx.device_id !== customer?.device_id && <Pill>{lang === "bn" ? "ভিন্ন ফোন থেকে" : "Using a different phone"}: {tx.device_id}</Pill>}
               <Button type="submit" disabled={busy || !tx?.receiver || !amountInput || Number(amountInput) <= 0} className="w-full">{busy ? "…" : lang === "bn" ? "পাঠান" : "Send"}</Button>
               {error && <ErrorBox error={error} />}
@@ -229,17 +273,45 @@ export default function CustomerPage() {
                     </ul>
                   )}
                   <p lang={lang} className="mt-2 text-xs text-ink-2">{msg.body}</p>
+                  {result.decision !== "ALLOW" && (
+                    <button type="button" onClick={() => speak([msg.title, ...msg.reasons, msg.body].join(". "), lang)}
+                      className="mt-2 text-xs font-medium text-brand underline">
+                      {lang === "bn" ? "🔊 সতর্কবার্তাটি শুনুন" : "🔊 Listen to this warning"}
+                    </button>
+                  )}
                   {!outcome && result.decision === "WARN" && (
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <Button onClick={() => confirm(result, "cancelled")}>{lang === "bn" ? "বাতিল করুন" : "Cancel"}</Button>
-                      <Button variant="secondary" onClick={() => confirm(result, "sent")}>{lang === "bn" ? "তবুও পাঠান" : "Send anyway"}</Button>
-                    </div>
+                    <>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <Button onClick={() => confirm(result, "cancelled")}>{lang === "bn" ? "বাতিল করুন" : "Cancel"}</Button>
+                        <Button variant="secondary" disabled={coolOff > 0} onClick={() => confirm(result, "sent")}>
+                          {coolOff > 0 ? (lang === "bn" ? `একটু ভাবুন… ${coolOff}s` : `Take a moment… ${coolOff}s`) : lang === "bn" ? "তবুও পাঠান" : "Send anyway"}
+                        </Button>
+                      </div>
+                      <p lang={lang} className="mt-2 text-[11px] text-ink-2">
+                        {lang === "bn"
+                          ? "পাঠানোর আগে পরিবারের একজন বিশ্বস্ত মানুষকে ফোন করে জিজ্ঞেস করুন। প্রতারকেরা চায় আপনি কাউকে না জানিয়ে তাড়াতাড়ি পাঠান।"
+                          : "Before sending, call someone you trust in your family. Scammers want you to send quickly without telling anyone."}
+                      </p>
+                    </>
                   )}
                   {!outcome && result.decision === "HOLD" && (
                     <div className="mt-3 grid grid-cols-1 gap-2">
                       <Button onClick={() => confirm(result, "cancelled")}>{lang === "bn" ? "লেনদেন বাতিল করুন" : "Cancel this transfer"}</Button>
                       <p className="text-center text-xs text-ink-2">{lang === "bn" ? "অথবা আমাদের টিমের যাচাইয়ের জন্য অপেক্ষা করুন" : "Or wait for our team to verify it"}</p>
                     </div>
+                  )}
+                  {result.decision !== "ALLOW" && outcome !== "CANCELLED" && (
+                    appeal ? (
+                      <p lang={lang} className="mt-2 text-xs font-medium text-ink">
+                        {appeal.startsWith("appealed")
+                          ? (lang === "bn" ? `✓ আপিল জমা হয়েছে। একজন বিশ্লেষক ${appeal.split(":")[1]} মিনিটের মধ্যে দেখবেন।` : `✓ Appeal received. An analyst will review it within ${appeal.split(":")[1]} minutes.`)
+                          : (lang === "bn" ? "এই লেনদেনটি ইতিমধ্যে যাচাই করা হয়েছে।" : "This transfer has already been reviewed.")}
+                      </p>
+                    ) : (
+                      <button type="button" onClick={() => sendAppeal(result)} className="mt-2 block text-xs font-medium text-brand underline">
+                        {lang === "bn" ? "এটি প্রতারণা নয়? আপিল করুন" : "Not a scam? Appeal this decision"}
+                      </button>
+                    )
                   )}
                   {outcome && (
                     <p className="mt-3 text-sm font-medium text-ink">
@@ -362,6 +434,7 @@ export default function CustomerPage() {
                 <Pill>model {result.model_version}</Pill>
                 <Pill>policy v{result.policy_version}</Pill>
                 {result.degraded && <Pill>degraded: {result.degraded_reasons.join(", ")}</Pill>}
+                {result.mode && result.mode !== "enforce" && <Pill tone="brand">mode {result.mode}: policy said {result.policy_decision}</Pill>}
               </div>
               <div className="space-y-2">
                 {result.signals.map((s) => (
