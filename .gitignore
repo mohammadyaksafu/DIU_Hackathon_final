@@ -24,3 +24,6 @@ frontend/next-env.d.ts
 Thumbs.db
 .vscode/
 .idea/
+
+# Local-only notes
+docs/PHASE2_EVALUATION.md
