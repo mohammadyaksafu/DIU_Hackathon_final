@@ -1,9 +1,46 @@
-# Shurokkha (সুরক্ষা): AI Trust & Financial-Safety Copilot for upay
+<div align="center">
+
+# 🏆 Shurokkha (সুরক্ষা)
+
+### AI Trust & Financial-Safety Copilot for upay
+
+**Champion · AI DEV FEST 2026 · DIU CPC × upay AI Hackathon**<br/>
+Built by **Team TwinLogic**
+
+[![Champion](https://img.shields.io/badge/%F0%9F%8F%86_AI_DEV_FEST_2026-Champion-FFB800?style=for-the-badge)](#-champion-ai-dev-fest-2026)
+[![Live demo](https://img.shields.io/badge/Live_demo-online-0F766E?style=for-the-badge)](https://165-99-219-251.sslip.io)
+[![API docs](https://img.shields.io/badge/API-OpenAPI_docs-2563EB?style=for-the-badge)](https://165-99-219-251.sslip.io/docs)
+[![CI](https://github.com/mohammadyaksafu/DIU_Hackathon_final/actions/workflows/ci.yml/badge.svg)](https://github.com/mohammadyaksafu/DIU_Hackathon_final/actions/workflows/ci.yml)
+
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
+![LightGBM](https://img.shields.io/badge/LightGBM-4.7-9ACD32)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+![Gemini](https://img.shields.io/badge/GenAI-Gemini-8E75B2?logo=googlegemini&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+
+[![Watch the demo video](docs/screenshots/00-video-thumbnail.png)](docs/video/Shurokkha_Demo.mp4)
+
+▶ **[Watch the 6-minute demo](docs/video/Shurokkha_Demo.mp4)** · [Try it live](https://165-99-219-251.sslip.io) · [Project report](docs/Shurokkha_Project_Report.docx) · [Evidence pack](docs/reports/evaluation.md)
+
+</div>
 
 > **Stop the scam *before* the money leaves.** Shurokkha scores every transfer in milliseconds, explains risk to the customer in plain Bangla, finds money-mule rings in the transaction graph, and gives analysts an AI case summary grounded only in evidence.
 
-**Live demo:** https://165-99-219-251.sslip.io · **API docs:** https://165-99-219-251.sslip.io/docs · **Health:** https://165-99-219-251.sslip.io/health/ready · **Video:** `<add-video-link>` · **Report:** [docs/Shurokkha_Project_Report.docx](docs/Shurokkha_Project_Report.docx)
-AI DEV FEST 2026 · DIU CPC × upay AI Hackathon · Track 01 *Trust & Risk Intelligence* (with Track 03 customer empowerment and Track 06 investigation copilot)
+## 🏆 Champion, AI DEV FEST 2026
+
+**Team TwinLogic** won the **AI DEV FEST 2026 · DIU CPC × upay AI Hackathon** with Shurokkha, competing in Track 01 *Trust & Risk Intelligence* (with Track 03 customer empowerment and Track 06 investigation copilot).
+
+| | At a glance |
+|---|---|
+| ⚡ **Real time** | ~5 ms server-side scoring per transfer; ALLOW / WARN / HOLD decision |
+| 🎯 **Accurate** | PR-AUC **0.992**, recall **99.1%** at 1% FPR on the held-out window; full-system FPR **0.21%** |
+| 🗣️ **Explainable** | Verified SHAP reason codes, shown to customers in plain Bangla |
+| 🕸️ **Graph-aware** | Finds money-mule rings with Louvain communities and PageRank |
+| 🤖 **AI copilot** | Evidence-grounded case summaries and SOP answers (RAG), with deterministic fallbacks |
+| 🏦 **Bank-style load** | Ramped to 800 concurrent users; 5-minute soak with 0 errors; 0 transfers lost when a worker is killed |
+
+**Links:** [Live demo](https://165-99-219-251.sslip.io) · [API docs](https://165-99-219-251.sslip.io/docs) · [Health](https://165-99-219-251.sslip.io/health/ready) · [Demo video](docs/video/Shurokkha_Demo.mp4) ([script & timestamps](docs/video/DEMO_SCRIPT.md)) · [Project report](docs/Shurokkha_Project_Report.docx)
 
 > All data in this project is **synthetic**. No real customer, phone number or transaction is used.
 
@@ -266,4 +303,6 @@ Synthetic fraud is easier than real fraud, so we also test what happens when the
 
 ## 15. Disclosures & team
 
-See [DISCLOSURES.md](DISCLOSURES.md) for external libraries, models and services. Team: `<names and roles>`.
+See [DISCLOSURES.md](DISCLOSURES.md) for external libraries, models and services.
+
+Built by **Team TwinLogic**, Champion of AI DEV FEST 2026 · DIU CPC × upay AI Hackathon. 🏆

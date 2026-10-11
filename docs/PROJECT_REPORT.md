@@ -1,7 +1,7 @@
 # Shurokkha (সুরক্ষা): Project Report
 
 > The formatted version of this report is [Shurokkha_Project_Report.docx](Shurokkha_Project_Report.docx).
-AI DEV FEST 2026 · DIU CPC × upay AI Hackathon · Team `<team name>` · `<member names>`
+AI DEV FEST 2026 · DIU CPC × upay AI Hackathon · Team TwinLogic · 🏆 Champion
 
 ## 1. Problem
 For **first-time and low-digital-literacy upay users and upay's risk-operations team**, **social-engineering scams, account takeovers and money-mule networks** cause **irreversible losses, customer distrust and slow manual investigations**. Trust is "foundational to wallet adoption and transaction growth" (upay guideline, Track 01). Victims are often remittance receivers and garments workers who were pressured on a phone call. The money moves through mule wallets and is cashed out within minutes, so once it is sent it is effectively gone.

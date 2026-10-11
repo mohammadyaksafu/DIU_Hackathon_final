@@ -1,0 +1,219 @@
+1
+00:00:00,855 --> 00:00:04,203
+This is Shurokkha, which means protection in Bangla.
+
+2
+00:00:04,203 --> 00:00:12,055
+It is an AI trust and financial-safety copilot for upay, built for the DIU CPC and upay AI Hackathon.
+
+3
+00:00:12,055 --> 00:00:16,000
+Its goal is simple: stop the scam before the money leaves.
+
+4
+00:00:16,926 --> 00:00:28,530
+For first-time mobile wallet users, prize scams, fake wrong-send refunds, SIM-swap account takeovers and money-mule networks cause losses that are almost impossible to reverse.
+
+5
+00:00:28,530 --> 00:00:33,621
+Risk teams review alerts by hand, slowly, and with little context.
+
+6
+00:00:33,621 --> 00:00:42,605
+Shurokkha answers three questions for every transfer, in milliseconds: what happened, why is it risky, and what should upay do next.
+
+7
+00:00:43,537 --> 00:00:45,336
+This is the overview page.
+
+8
+00:00:45,336 --> 00:00:47,445
+On the right is Rahima's story.
+
+9
+00:00:47,445 --> 00:00:50,766
+A caller tells her she won a prize and must pay a fee.
+
+10
+00:00:50,766 --> 00:00:54,945
+Shurokkha interrupts her in plain Bangla, with specific reasons.
+
+11
+00:00:54,945 --> 00:01:07,589
+Below are results on a held-out test window: a PR-AUC of 0.992, 96 percent of fraud caught, and only 0.21 percent of legitimate customers flagged.
+
+12
+00:01:07,589 --> 00:01:10,284
+All data in this project is synthetic.
+
+13
+00:01:11,221 --> 00:01:13,788
+Every decision follows the same pipeline.
+
+14
+00:01:13,788 --> 00:01:24,830
+A transfer request, point-in-time features, four plug-in detectors: rules, an Isolation Forest, a calibrated LightGBM model and mule-graph risk.
+
+15
+00:01:24,830 --> 00:01:32,434
+Then a YAML policy, SHAP reason codes, the action, and analyst feedback that flows back into retraining.
+
+16
+00:01:33,359 --> 00:01:38,752
+Now the customer app: a demo upay wallet, signed in as a synthetic customer.
+
+17
+00:01:38,752 --> 00:01:41,226
+On the right are one-click scenarios.
+
+18
+00:01:41,226 --> 00:01:44,950
+First, an everyday case: sending money to family.
+
+19
+00:01:44,950 --> 00:01:51,056
+The backend scores it in a few milliseconds, finds nothing unusual, and the money is sent.
+
+20
+00:01:51,056 --> 00:01:53,231
+No friction for normal customers.
+
+21
+00:01:54,151 --> 00:01:56,536
+Next, an account takeover at night.
+
+22
+00:01:56,536 --> 00:02:05,208
+Behind the scenes, the scenario records a SIM swap two hours ago and a PIN reset minutes ago, and the transfer comes from a new phone.
+
+23
+00:02:05,208 --> 00:02:17,994
+Shurokkha holds the transfer and explains why, in Bangla: a SIM change, plus a new phone, plus a large amount matches an account-takeover pattern, and the receiver is linked to a cash-out ring.
+
+24
+00:02:17,994 --> 00:02:22,460
+The customer can cancel, listen to a spoken warning, or appeal.
+
+25
+00:02:23,393 --> 00:02:30,804
+The What the AI saw tab shows exactly what was sent to the scoring API, with the new phone and the new area highlighted.
+
+26
+00:02:30,804 --> 00:02:37,692
+Below are every detector score, the verified reason codes, and the exact policy rule that caused the hold.
+
+27
+00:02:37,692 --> 00:02:40,726
+The whole decision took only a few milliseconds.
+
+28
+00:02:41,642 --> 00:02:44,118
+Not every risky transfer needs a hold.
+
+29
+00:02:44,118 --> 00:02:51,149
+Here, a garments worker's wallet receives fresh money and drains it at an agent, a typical mule cash-out.
+
+30
+00:02:51,149 --> 00:02:53,389
+This time the decision is a warning.
+
+31
+00:02:53,389 --> 00:03:00,993
+Instead of a simple pop-up, send anyway is locked behind a cooling-off timer, which breaks the panic that scammers create.
+
+32
+00:03:00,993 --> 00:03:04,313
+The customer can also hear the warning spoken in Bangla.
+
+33
+00:03:05,258 --> 00:03:13,203
+Every warning and hold lands in the analyst console, ranked by calibrated risk, with customer appeals moved to the top.
+
+34
+00:03:13,203 --> 00:03:16,367
+A start-here pointer opens the highest-risk case.
+
+35
+00:03:17,291 --> 00:03:25,535
+The case page brings all the evidence together: the transfer, the reasons in English and Bangla, and each detector's score.
+
+36
+00:03:25,535 --> 00:03:35,731
+The money-flow network shows two hops around the receiver: a dense mule community draining to agent cash-out points, which no single transaction would reveal.
+
+37
+00:03:35,731 --> 00:03:39,272
+The SHAP chart shows which features drove the score.
+
+38
+00:03:40,205 --> 00:03:42,967
+Now the AI investigation copilot.
+
+39
+00:03:42,967 --> 00:03:50,624
+It writes a case summary grounded only in this case's evidence and the standard operating procedures, with citations.
+
+40
+00:03:50,624 --> 00:03:53,801
+The language model narrates; it never decides.
+
+41
+00:03:53,801 --> 00:03:57,941
+If it is unavailable, a rule-based template is used instead.
+
+42
+00:03:57,941 --> 00:04:02,694
+The analyst then labels the case, and that label feeds the next retraining.
+
+43
+00:04:03,622 --> 00:04:06,293
+Analysts can also ask procedure questions.
+
+44
+00:04:06,293 --> 00:04:15,121
+The SOP copilot retrieves the relevant procedures with BM25 search, and answers only from them, citing each source.
+
+45
+00:04:16,046 --> 00:04:26,621
+The impact page shows what this means for upay: victim loss prevented as a range with its assumptions, analyst hours saved, and a simulated return on investment.
+
+46
+00:04:26,621 --> 00:04:39,551
+The lift table shows the AI adds real value: rules alone reach a PR-AUC of 0.17, while LightGBM with graph and anomaly features reaches 0.99.
+
+47
+00:04:39,551 --> 00:04:50,072
+Recall is shown for every fraud scenario, and a fairness audit compares false-positive rates across division, age, KYC level, persona and tenure.
+
+48
+00:04:50,988 --> 00:04:54,766
+The admin page lets the risk team adapt without redeploying.
+
+49
+00:04:54,766 --> 00:05:04,154
+The decision policy is a YAML file that is validated, audited and hot-reloaded across all workers, and the model registry keeps versioned models.
+
+50
+00:05:04,154 --> 00:05:10,586
+Visitors get a read-only view; changes need an admin password that is never shipped to the browser.
+
+51
+00:05:11,494 --> 00:05:23,436
+Finally, a built-in user study measures, instead of assuming, how many people cancel a scam after a warning, comparing no warning, a generic warning, and Shurokkha's explained warning.
+
+52
+00:05:24,350 --> 00:05:37,816
+Under the hood: FastAPI, LightGBM, scikit-learn and NetworkX on the backend, Next.js and React on the frontend, PostgreSQL and Redis for shared state, all packaged with Docker.
+
+53
+00:05:37,816 --> 00:05:45,485
+In a bank-style load test it handled 800 concurrent users, and killing a worker mid-load lost zero transfers.
+
+54
+00:05:45,485 --> 00:05:46,396
+Shurokkha.
+
+55
+00:05:46,396 --> 00:05:52,034
+The AI explains, humans decide, and the scam is stopped before the money leaves.
